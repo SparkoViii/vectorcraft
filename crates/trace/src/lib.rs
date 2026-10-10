@@ -9,8 +9,8 @@
 //!    (Limited), median cut until every colour box is tight (Full Tone), one of those two by
 //!    whether the image is flat art (Automatic), or the most used colours of a swatch library
 //!    (Document Library). Transparent pixels are left out.
-//! 2. **Remove noise**: 4-connected same-colour components smaller than `noise` pixels are merged
-//!    into their most common neighbouring colour.
+//! 2. **Remove noise**: whole 4-connected same-colour regions are merged, smallest first, into
+//!    their most common neighbouring colour until no mergeable region is smaller than `noise`.
 //! 3. **Follow boundaries**: for each colour layer, the pixel-crack edges between inside and
 //!    outside are linked into closed loops (inside on the right, right turns at saddles, so
 //!    diagonal pixels stay separate, matching 4-connectivity). Outer loops run clockwise and
