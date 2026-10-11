@@ -12,6 +12,19 @@ is zero for an orthographic view. **Segments** controls radial resolution (8 to 
 Lighting is a directional light with azimuth, elevation, intensity and ambient contribution.
 Turn **Shading** off to keep the source paint without lighting.
 
+Enable **Smooth shading** in the **Lighting** tab to reduce bands across curved surfaces.
+It interpolates lighting from the profile's tangents and uses linear gradients on vector
+triangles. The existing Segments setting still controls the body silhouette, so smoothing does
+not increase radial resolution. Capped endpoint rings use curved vector boundaries. Original profile corners remain sharp, and circular end
+caps keep their flat shading. A reset dot and Reset all restore this option to off.
+
+Its saved parameter is `smoothShading` (boolean, default false). Missing parameters keep
+older artwork's flat appearance. The option is disabled while Shading is off. Smooth
+lighting follows the same light gizmo, rotation, perspective, preview, Cancel and undo
+behavior. SVG and PDF export retain vector paths and gradients; Expand Appearance keeps
+those gradients at their original positions when trimming visible surfaces. Non-solid
+source paints retain their paint with a gradient shading overlay.
+
 The dialog has **Rotation** and **Lighting** tabs. Rotation groups the profile and view controls. Drag a value or its label
 to adjust it, use its slider, or double-click the value to type. Angles show degrees and lighting
 values show percentages. **Segments** is in the **Advanced** section. Lighting controls are disabled
@@ -44,6 +57,19 @@ The source anchors remain editable. Appearance lists the effect for reopening it
 SVG/PDF export evaluates filled vector faces; native saves retain the profile and effect parameters.
 **Object > Expand Appearance** replaces the live effect with ordinary editable vector faces.
 
+**Cap open ends** in **Advanced** closes the circular rings at the endpoints of an open profile.
+It is off by default, preserving artwork saved before caps were available. Its saved parameter is
+`capEnds`. Each cap is one closed curved vector path from the endpoint ring to the rotation axis,
+with uniform flat shading. A full turn produces a projected circular disk (an ellipse in an
+orthographic view); a partial turn produces a sector. Body faces share the same curved rim,
+so no triangle patches interrupt the cap edge. Caps share the surface's rotation, perspective and paint, and appear in preview,
+SVG/PDF export and Expand Appearance. The checkbox has a reset dot and is included in Reset all.
+
+An endpoint on the axis needs no cap. Closed profiles and open profiles whose endpoints coincide
+keep their existing geometry. Each open subpath of a compound profile is capped independently.
+A partial revolve adds only the swept sector at each endpoint; the angular cut sides remain open.
+This option does not make intersecting or compound profiles into a watertight solid.
+
 In **Advanced**, **Keep visible surfaces only when expanding** is on by default. Expansion removes
 completely covered faces and trims partially covered ones using the current rotation and perspective.
 Visible interior surfaces through open ends remain. Uncheck it to retain every projected face.
@@ -53,17 +79,19 @@ The checkbox has its own reset dot and is included in **Reset all**. Its saved c
 Trimming applies to opaque solid paint. Transparent objects, gradients, patterns, non-normal blending,
 later geometry effects and surfaces exceeding bounded visibility limits keep their complete geometry
 to preserve their appearance. Visibility follows the same painter order as the live effect, including
-its approximation for intersecting surfaces. Expansion changes are undoable with the standard command.
+its approximation for intersecting surfaces. Uncut faces keep their curved outlines. Visibility calculations use bounded polygon approximations
+of curved rims; clipped portions become vector polygons. Expansion changes are undoable
+with the standard command.
 
 ## Initial limits
 
 - Paths and compound paths only. Type, images and groups must be converted to paths first.
-- Open profiles produce uncapped surfaces. Closed profile boundaries are swept as provided.
+- Open profiles are uncapped unless Cap open ends is enabled. Partial-sweep angular cut sides remain open. Closed profile boundaries are swept as provided.
 - One Revolve per source object. Edit its options rather than applying another.
 - Object-level Revolve uses the top visible fill, falling back to a stroke. Per-item Revolve uses that item's paint.
-- Flat shading, one directional light, no textures, cast shadows, end caps or physical materials.
-- Faces use back-to-front depth sorting. Intersecting profiles can have incorrect visibility.
-- Curves use sixteen samples per segment; profiles are limited to 1,024 samples and surfaces to 32,768 faces.
+- Flat or smooth diffuse shading, one directional light, no textures, cast shadows or physical materials. Smooth shading interpolates lighting in projected triangles; it does not smooth the silhouette or add specular highlights.
+- Faces use back-to-front depth sorting. Caps facing the camera cover their rim seams; caps facing away sit behind the body. Intersecting profiles can have incorrect visibility.
+- Curves use sixteen samples per segment; profiles are limited to 1,024 samples and surfaces to 32,768 faces. Smooth shaded side quads become two triangles and share that same limit. A continuous cap retains its original radial mesh cost within this limit. Projected ring curves have a 0.001-point fitting tolerance and a shared 32,768-curve limit.
 - Axis, bounds and ordinary selection handles continue to refer to the editable 2D source profile.
 - Extrude & Bevel, Inflate, Rotate and Materials remain unimplemented.
 
@@ -75,5 +103,9 @@ applies Euler view rotation, projects it, shades faces and sorts their depth. It
 Expand Appearance use the same evaluator. The standard `effect.apply`, `effect.setParams`,
 `effect.remove` and `effect.expandAppearance` commands expose it to the CLI, control channel and MCP.
 
-Behaviour reference: [public 3D effects documentation](https://helpx.adobe.com/illustrator/desktop/special-effects-styles/create-3d-graphics/create-3d-objects.html).
+Generated faces include narrow matching strokes to cover antialiasing seams. Their round
+joins bound the overlap to half the stroke width, preventing acute triangle corners from
+creating spikes along the silhouette in the canvas, SVG/PDF and expanded artwork.
+
+Behaviour references: [public 3D and Materials options](https://helpx.adobe.com/illustrator/desktop/special-effects-styles/create-3d-graphics/3d-materials-panel-options.html) and [public 3D effects documentation](https://helpx.adobe.com/illustrator/desktop/special-effects-styles/create-3d-graphics/create-3d-objects.html).
 This implementation uses original mathematics and source code, with no Adobe software, assets or presets.

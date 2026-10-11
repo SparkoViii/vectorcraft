@@ -1,6 +1,6 @@
 # Effects parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (PDF raster-effect resolution-cap warnings; Zig Zag's dialog with sliders and radio buttons, #1133; earlier: Brush Strokes landed) · **Target:** Adobe Illustrator 2026 (30.x)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (Revolve circular end caps, optional vector smooth shading and continuous rim correction; PDF raster-effect resolution-cap warnings; Zig Zag's dialog with sliders and radio buttons, #1133; earlier: Brush Strokes landed) · **Target:** Adobe Illustrator 2026 (30.x)
 
 Every entry of Illustrator's Effect menu, by its public feature name, against VectorCraft's effects catalogue
 (`effect_catalog()` in `crates/effects/src/lib.rs`) and the Effect menu built from it
@@ -59,7 +59,7 @@ Gallery dialog another 4–6 h. These parallelize well across agents.
 
 | Item | Ours |
 |---|---|
-| Revolve | initial: live, editable profile, rotation and light gizmos, flat shading, SVG/PDF output, Expand Appearance ([revolve.md](revolve.md), #846) |
+| Revolve | initial: live, editable profile, rotation and light gizmos, optional continuous curved end caps, flat or smooth vector shading with bounded seam joins, SVG/PDF output, Expand Appearance ([revolve.md](revolve.md), #846) |
 | Extrude & Bevel, Inflate, Rotate | none (menu stubs) |
 | Materials panel, lighting, ray-traced render | none |
 | 3D (Classic): Extrude & Bevel, Revolve, Rotate | none |
@@ -67,13 +67,14 @@ Gallery dialog another 4–6 h. These parallelize well across agents.
 | Export 3D objects (OBJ, USDA, glTF) | none |
 
 The `three-d` crate (depends only on `geom`) builds, rotates, projects, shades and depth-sorts the surfaces;
-the effects crate turns them into art. What's left (Extrude & Bevel, Inflate, Rotate, caps, materials, ray-traced
+the effects crate turns them into art. What's left (Extrude & Bevel, Inflate, Rotate, angular cut caps, materials, ray-traced
 rendering, Turntable, 3D export) is 45–75 h, still the largest single gap.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-11 | minor | Revolve: optional circular end caps for open profiles, including sector caps for partial sweeps, and smooth diffuse shading using vector gradients with sharp profile corners and flat caps, plus bounded seam joins that prevent rim spikes at high zoom and single curved caps with matching body rims; angular cut sides remain open. Scores and hour estimates unchanged at this rounding |
 | 2026-10-11 | minor | PDF cap warnings identify original objects after appearance splitting and report the lowest achieved ppi; cap/rendering and scores unchanged |
 | 2026-10-11 | minor | Zig Zag's dialog: Size and Ridges per segment sliders, Points as Smooth / Corner radio buttons (#1133) |
 | 2026-10-11 | minor | Brush Strokes landed (8 filters): 28/57 Photoshop effects |

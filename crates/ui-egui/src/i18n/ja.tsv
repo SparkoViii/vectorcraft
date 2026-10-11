@@ -4144,3 +4144,11 @@ lighting	Light	ライト
 @msg	unsupported native docking operation	ネイティブドッキング操作は未対応です
 	Linux Display Server	Linux ディスプレイサーバー
 	X11 (XWayland)	X11 (XWayland)
+
+# Revolve endpoint caps
+	Cap open ends	開いた端を閉じる
+	Close the circular ends of open profiles. Partial sweeps keep their cut sides open.	開いたプロファイルの円形の端を閉じます。部分的な回転では切断面は開いたままです。
+
+	Smooth shading	滑らかなシェーディング
+
+	Smooth curved surfaces with vector gradients. Profile corners and end caps stay sharp.	ベクターグラデーションで曲面を滑らかにします。プロファイルの角と端面はシャープに保たれます。

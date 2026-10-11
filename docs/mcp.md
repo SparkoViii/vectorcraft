@@ -841,10 +841,14 @@ SVG/PDF exports bake the same faces the canvas draws. Only one Revolve is suppor
 
 Parameters: `angle` (degrees, 0..360, default 360), `offset` (points, 0..100000, default 0),
 `edge` (`"left"` or `"right"`), `rotationX/Y/Z` (degrees, defaults 0/0/0), `perspective`
-(0..100%, default 0), `segments` (8..128, default 64), `shade` (default true), `lightAzimuth`
+(0..100%, default 0), `segments` (8..128, default 64), `shade` (default true), `smoothShading` (boolean, default false), `lightAzimuth`
 (degrees, default -45), `lightElevation` (degrees, default 45), `lightIntensity` (0..100%, default 80),
-`ambient` (0..100%, default 25), and `expandVisibleOnly` (boolean, default true). A vertical-line profile needs a positive offset to have a radius.
-Open profiles have no end caps. Visibility of intersecting surfaces is approximate.
+`ambient` (0..100%, default 25), `capEnds` (boolean, default false), and `expandVisibleOnly`
+(boolean, default true). A vertical-line profile needs a positive offset to have a radius.
+`capEnds` closes each circular endpoint of an open profile with one curved, uniformly shaded
+vector path. Body faces share that curved rim. Partial sweeps use sectors and leave their angular
+cut sides open. Closed or coincident-end profiles are unchanged.
+Missing `capEnds` preserves the original uncapped appearance. `smoothShading` interpolates curved-surface lighting with vector gradients while preserving profile corners and flat caps. It has no effect when `shade` is false. Missing `smoothShading` keeps legacy flat shading. Visibility of intersecting surfaces is approximate.
 The dialog's Lighting tab manipulates the same `lightAzimuth` and `lightElevation` parameters;
 its guide visibility and tab choice are UI state, excluded from saved effect parameters.
 `expandVisibleOnly` is saved with the effect. It trims covered portions of opaque solid surfaces only
@@ -855,7 +859,7 @@ See [Revolve](revolve.md) for the scope and limitations.
 
 ```json
 {"name":"run_command","arguments":{"command":"effect.apply","params":{"effect":"threeD.revolve","item":null,"params":{"angle":360,"offset":20,"edge":"left","rotationX":0,"rotationY":0,"rotationZ":0}}}}
-{"name":"run_command","arguments":{"command":"effect.setParams","params":{"index":0,"item":null,"params":{"angle":180,"lightAzimuth":30}}}}
+{"name":"run_command","arguments":{"command":"effect.setParams","params":{"index":0,"item":null,"params":{"angle":180,"lightAzimuth":30,"capEnds":true,"smoothShading":true}}}}
 {"name":"run_command","arguments":{"command":"effect.setParams","params":{"index":0,"item":null,"params":{"expandVisibleOnly":true}}}}
 {"name":"run_command","arguments":{"command":"effect.expandAppearance","params":{}}}
 ```

@@ -4148,3 +4148,11 @@ lighting	Light	Luz
 @msg	unsupported native docking operation	Operación nativa de anclaje no admitida
 	Linux Display Server	Servidor de pantalla de Linux
 	X11 (XWayland)	X11 (XWayland)
+
+# Revolve endpoint caps
+	Cap open ends	Cerrar extremos abiertos
+	Close the circular ends of open profiles. Partial sweeps keep their cut sides open.	Cierra los extremos circulares de los perfiles abiertos. Los giros parciales mantienen abiertos sus lados de corte.
+
+	Smooth shading	Sombreado suave
+
+	Smooth curved surfaces with vector gradients. Profile corners and end caps stay sharp.	Suaviza las superficies curvas con degradados vectoriales. Las esquinas del perfil y las tapas conservan sus bordes definidos.
