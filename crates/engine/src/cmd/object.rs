@@ -55,6 +55,15 @@ pub fn specs() -> Vec<CommandSpec> {
             scale
         ),
         cmd!(
+            "object.setLength",
+            "Set Length",
+            [],
+            None,
+            "{length: pt (must be > 0), origin?: [x,y], copy?, strokes?: bool, corners?: bool, patterns?: bool} (Path Length panel) uniformly scales the selection, about its centre by default, so the summed length of every path in it (a compound path's and a selected group's paths included) becomes `length`",
+            has_selection,
+            set_length
+        ),
+        cmd!(
             "object.reflect",
             "Reflect…",
             ["Object", "Transform"],
@@ -448,6 +457,36 @@ fn scale(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad("object.scale", "scale must be non-zero"));
     }
     apply_transform(s, "Scale", ids, about(o, Affine::scale_non_uniform(sx, sy)), p, true)
+}
+
+/// The total length of every path in `ids`' subtrees (every `NodeKind::Path`, so a compound
+/// path's children and the paths inside a selected group all count): a path's own length plus
+/// its descendants', summed across `ids`. `path` is already in document units, so no per-node
+/// transform needs applying.
+pub(crate) fn selection_length(d: &Document, ids: &[NodeId]) -> f64 {
+    let mut total = 0.0;
+    for n in ids.iter().filter_map(|id| d.node(*id)) {
+        n.walk(&mut |c| {
+            if let NodeKind::Path { path, .. } = &c.kind {
+                total += path.length();
+            }
+        });
+    }
+    total
+}
+
+fn set_length(s: &mut Session, p: &Value) -> Result<Value> {
+    let ids = selected_roots(s)?;
+    let o = origin_of(s, p, &ids)?;
+    let cur = selection_length(&s.doc()?.doc, &ids);
+    if cur <= 1e-9 {
+        return Err(bad("object.setLength", "selection has no length to scale"));
+    }
+    let len = f64_req(p, "length", "object.setLength")?;
+    if len <= 0.0 {
+        return Err(bad("object.setLength", "length must be greater than zero"));
+    }
+    apply_transform(s, "Set Length", ids, about(o, Affine::scale(len / cur)), p)
 }
 
 fn reflect(s: &mut Session, p: &Value) -> Result<Value> {
@@ -1089,6 +1128,11 @@ impl Session {
     /// box, see [`Document::oriented_bounds`]).
     pub fn transform_box(&self, ids: &[NodeId]) -> Option<OrientedBox> {
         self.doc().ok()?.doc.oriented_bounds(ids, self.prefs.use_preview_bounds)
+    }
+    /// The Path Length panel's reading for `ids`: the summed length of every path in their
+    /// subtrees ([`selection_length`]), or `None` with no document open.
+    pub fn selection_length(&self, ids: &[NodeId]) -> Option<f64> {
+        Some(selection_length(&self.doc().ok()?.doc, ids))
     }
 }
 

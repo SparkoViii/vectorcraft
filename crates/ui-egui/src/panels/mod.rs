@@ -31,6 +31,7 @@ pub mod magic_wand;
 pub mod navigator;
 pub mod opentype;
 pub mod paragraph;
+pub mod path_length;
 pub mod pathfinder;
 pub mod pattern_options;
 pub mod properties;
@@ -115,6 +116,7 @@ pub fn show_icon_panel(app: &mut VectorcraftApp, ui: &mut Ui, id: &str) {
         "align" => align::show(app, ui),
         "pathfinder" => pathfinder::show(app, ui),
         "transform" => transform::show(app, ui),
+        "pathLength" => path_length::show(app, ui),
         "history" => history::show(app, ui),
         "actions" => actions::show(app, ui),
         "info" => info::show(app, ui),
