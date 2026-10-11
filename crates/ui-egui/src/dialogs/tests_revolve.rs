@@ -147,7 +147,7 @@ fn lighting_tab_shows_light_fields_and_keeps_the_dialog_compact() {
     h.settle();
     h.click(h.rect("Lighting").center());
     assert_eq!(h.app.ui.dialog.as_ref().unwrap().str("__gizmo"), "light");
-    for label in ["Shading", "Direction", "Elevation", "Intensity", "Ambient"] {
+    for label in ["Shading", "Smooth shading", "Direction", "Elevation", "Intensity", "Ambient"] {
         assert!(Rect::from_min_size(Pos2::ZERO, h.screen).contains_rect(h.rect(label)));
     }
     let panel = h.ctx.memory(|m| m.area_rect(Id::new(("dialog", "effect")).with("revolve"))).unwrap();
@@ -159,6 +159,50 @@ fn lighting_tab_shows_light_fields_and_keeps_the_dialog_compact() {
     h.click(h.rect("Rotation").center());
     assert_eq!(h.app.ui.dialog.as_ref().unwrap().str("__gizmo"), "rotation");
     assert!(!h.rect("Rotation X").is_negative());
+}
+
+#[test]
+fn smooth_shading_previews_resets_saves_and_respects_cancel_and_one_step_undo() {
+    for confirm in [false, true] {
+        let mut h = Harness::new(vec2(1280.0, 900.0));
+        let before = h.app.session.doc().unwrap().doc.clone();
+        h.settle();
+        h.click(h.rect("Lighting").center());
+        let art = |h: &Harness| {
+            let state = h.app.session.doc().unwrap();
+            vectorcraft_effects::revolve_art(state.doc.node(state.selection.objects[0]).unwrap()).unwrap()
+        };
+        let flat = art(&h);
+        h.click(h.rect("Smooth shading").center());
+        assert!(h.app.ui.dialog.as_ref().unwrap().bool("smoothShading"));
+        assert_ne!(art(&h), flat);
+        h.click(h.response(("revolve-reset", "smoothShading")).center());
+        assert_eq!(art(&h), flat);
+        h.click(h.rect("Smooth shading").center());
+        h.click(h.response("revolve-reset-all").center());
+        assert!(!h.app.ui.dialog.as_ref().unwrap().bool("smoothShading"));
+        h.click(h.rect("Smooth shading").center());
+        h.click(h.rect("Shading").center());
+        let disabled = h.app.ui.dialog.as_ref().unwrap().clone();
+        h.click(h.rect("Smooth shading").center());
+        assert_eq!(h.app.ui.dialog.as_ref().unwrap().fields, disabled.fields, "disabled while shading is off");
+        h.click(h.rect("Shading").center());
+        h.app.ui.dialog.as_mut().unwrap().fields.insert("preview".into(), json!(false));
+        h.settle();
+        assert_eq!(h.app.session.doc().unwrap().doc, before);
+        h.app.ui.dialog.as_mut().unwrap().fields.insert("preview".into(), json!(true));
+        h.settle();
+        if confirm {
+            dialogs::confirm(&mut h.app).unwrap();
+            let state = h.app.session.doc().unwrap();
+            let loaded = vectorcraft_format::load(&vectorcraft_format::save(&state.doc, false)).unwrap();
+            assert_eq!(loaded.node(state.selection.objects[0]).unwrap().appearance.effects[0].params["smoothShading"], json!(true));
+            h.app.run("edit.undo", json!({})).unwrap();
+        } else {
+            dialogs::cancel(&mut h.app);
+        }
+        assert_eq!(h.app.session.doc().unwrap().doc, before);
+    }
 }
 
 #[test]
@@ -198,4 +242,53 @@ fn advanced_visibility_option_is_saved_resettable_and_leaves_preview_geometry_co
     let state = h.app.session.doc().unwrap();
     let loaded = vectorcraft_format::load(&vectorcraft_format::save(&state.doc, false)).unwrap();
     assert_eq!(loaded.node(state.selection.objects[0]).unwrap().appearance.effects[0].params["expandVisibleOnly"], json!(true));
+}
+
+#[test]
+fn cap_checkbox_previews_resets_and_respects_cancel_and_one_step_undo() {
+    for confirm in [false, true] {
+        let mut h = Harness::new(vec2(1280.0, 1000.0));
+        let before = h.app.session.doc().unwrap().doc.clone();
+        let dialog = h.app.ui.dialog.as_mut().unwrap();
+        dialog.fields.insert("offset".into(), json!(20));
+        dialog.fields.insert("rotationX".into(), json!(-35));
+        h.settle();
+        h.click(h.rect("Advanced").center());
+        let panel = h.ctx.memory(|m| m.area_rect(Id::new(("dialog", "effect")).with("revolve"))).unwrap();
+        h.frame(vec![
+            Event::PointerMoved(panel.center()),
+            Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: vec2(0.0, -220.0),
+                phase: egui::TouchPhase::Move,
+                modifiers: Default::default(),
+            },
+        ]);
+        h.settle();
+        let art = |h: &Harness| {
+            let state = h.app.session.doc().unwrap();
+            vectorcraft_effects::revolve_art(state.doc.node(state.selection.objects[0]).unwrap()).unwrap()
+        };
+        let open = art(&h);
+        h.click(h.rect("Cap open ends").center());
+        assert!(h.app.ui.dialog.as_ref().unwrap().bool("capEnds"));
+        assert_ne!(art(&h), open);
+        h.click(h.response(("revolve-reset", "capEnds")).center());
+        assert!(!h.app.ui.dialog.as_ref().unwrap().bool("capEnds"));
+        assert_eq!(art(&h), open);
+        h.click(h.rect("Cap open ends").center());
+        h.click(h.response("revolve-reset-all").center());
+        assert!(!h.app.ui.dialog.as_ref().unwrap().bool("capEnds"));
+        h.click(h.rect("Cap open ends").center());
+        if confirm {
+            dialogs::confirm(&mut h.app).unwrap();
+            let state = h.app.session.doc().unwrap();
+            assert_eq!(state.doc.node(state.selection.objects[0]).unwrap().appearance.effects[0].params["capEnds"], json!(true));
+            h.app.run("edit.undo", json!({})).unwrap();
+        } else {
+            dialogs::cancel(&mut h.app);
+        }
+        assert_eq!(h.app.session.doc().unwrap().doc, before);
+        assert!(!h.app.session.in_interaction());
+    }
 }

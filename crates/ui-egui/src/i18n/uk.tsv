@@ -4129,3 +4129,11 @@ lighting	Light	Світло
 @msg	unsupported native docking operation	Непідтримувана власна операція прикріплення
 	Linux Display Server	Дисплейний сервер Linux
 	X11 (XWayland)	X11 (XWayland)
+
+# Revolve endpoint caps
+	Cap open ends	Закрити відкриті торці
+	Close the circular ends of open profiles. Partial sweeps keep their cut sides open.	Закриває круглі торці відкритих профілів. За неповного обертання бічні зрізи залишаються відкритими.
+
+	Smooth shading	Плавне затінення
+
+	Smooth curved surfaces with vector gradients. Profile corners and end caps stay sharp.	Згладжує криволінійні поверхні векторними градієнтами. Кути профілю й торцеві кришки залишаються чіткими.

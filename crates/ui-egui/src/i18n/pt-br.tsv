@@ -2804,3 +2804,11 @@ lighting	Light	Luz
 	Sumi-e…	Sumi-e…
 	Vertical Guide	Guia vertical
 	Horizontal Guide	Guia horizontal
+
+# Revolve endpoint caps
+	Cap open ends	Fechar extremidades abertas
+	Close the circular ends of open profiles. Partial sweeps keep their cut sides open.	Fecha as extremidades circulares dos perfis abertos. Giros parciais mantêm as faces de corte abertas.
+
+	Smooth shading	Sombreamento suave
+
+	Smooth curved surfaces with vector gradients. Profile corners and end caps stay sharp.	Suaviza superfícies curvas com gradientes vetoriais. Os cantos do perfil e as tampas permanecem nítidos.

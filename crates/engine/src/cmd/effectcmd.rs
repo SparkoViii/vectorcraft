@@ -538,6 +538,71 @@ mod tests {
     }
 
     #[test]
+    fn smooth_revolve_commands_validate_save_expand_and_undo() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({"width":300,"height":300})).unwrap();
+        let r = s.execute("path.create", &json!({"d":"M150 40 C190 60 190 140 150 160"})).unwrap();
+        let id = NodeId(r["id"].as_u64().unwrap());
+        s.execute("effect.apply", &json!({"effect":"threeD.revolve","ids":[id.0],"item":null,"params":{"offset":20,"segments":16}})).unwrap();
+        let flat = node(&s, id);
+        let source = flat.path_data().unwrap().clone();
+        s.execute("effect.setParams", &json!({"index":0,"ids":[id.0],"item":null,"params":{"smoothShading":true}})).unwrap();
+        let smooth = node(&s, id);
+        assert_eq!(smooth.path_data(), Some(&source));
+        assert_ne!(effects_for_test(&s, id), effects::revolve_art(&flat).unwrap());
+        for bad in [json!("yes"), json!(1), json!(null)] {
+            assert!(s.execute("effect.setParams", &json!({"index":0,"ids":[id.0],"item":null,"params":{"smoothShading":bad}})).is_err());
+            assert_eq!(node(&s, id), smooth);
+        }
+        let restored = vectorcraft_format::load(&vectorcraft_format::save(&s.doc().unwrap().doc, false)).unwrap();
+        assert_eq!(effects::revolve_art(restored.node(id).unwrap()), Some(effects_for_test(&s, id)));
+        s.execute("effect.expandAppearance", &json!({"ids":[id.0]})).unwrap();
+        assert!(!effects::has_revolve(&node(&s, id)));
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert_eq!(node(&s, id), smooth);
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert_eq!(node(&s, id), flat);
+    }
+
+    #[test]
+    fn revolve_caps_save_export_expand_and_undo_without_changing_the_source() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({"width":300,"height":300})).unwrap();
+        let r = s.execute("path.create", &json!({"d":"M150 40 L150 160"})).unwrap();
+        let id = NodeId(r["id"].as_u64().unwrap());
+        let source = node(&s, id).path_data().unwrap().clone();
+        s.execute(
+            "effect.apply",
+            &json!({"effect":"threeD.revolve","ids":[id.0],"item":null,
+            "params":{"offset":30,"rotationX":-35,"segments":16,"expandVisibleOnly":false}}),
+        )
+        .unwrap();
+        let uncapped = node(&s, id);
+        assert_eq!(uncapped.appearance.effects[0].params["capEnds"], json!(false));
+        let count = |n: &vectorcraft_doc::Node| n.children().unwrap()[0].children().unwrap().len();
+        let open_count = count(&effects_for_test(&s, id));
+        s.execute("effect.setParams", &json!({"index":0,"ids":[id.0],"item":null,"params":{"capEnds":true}})).unwrap();
+        let capped = node(&s, id);
+        let art = effects_for_test(&s, id);
+        assert_eq!(count(&art), open_count + 2, "each endpoint adds one continuous vector cap");
+        assert_eq!(capped.path_data(), Some(&source));
+        assert!(s.execute("effect.setParams", &json!({"index":0,"ids":[id.0],"item":null,"params":{"capEnds":"yes"}})).is_err());
+        assert_eq!(node(&s, id), capped, "a bad boolean does not mutate the document");
+        let restored = vectorcraft_format::load(&vectorcraft_format::save(&s.doc().unwrap().doc, false)).unwrap();
+        assert_eq!(restored.node(id).unwrap().appearance.effects[0].params["capEnds"], json!(true));
+        assert_eq!(effects::revolve_art(restored.node(id).unwrap()), Some(art.clone()));
+        let pdf = s.execute("document.serialize", &json!({"format":"pdf"})).unwrap();
+        assert!(vectorcraft_format::base64_decode(pdf["dataBase64"].as_str().unwrap()).unwrap().starts_with(b"%PDF"));
+        s.execute("effect.expandAppearance", &json!({"ids":[id.0]})).unwrap();
+        assert_eq!(count(&node(&s, id)), count(&art));
+        assert!(!effects::has_revolve(&node(&s, id)));
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert_eq!(node(&s, id), capped);
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert_eq!(node(&s, id), uncapped);
+    }
+
+    #[test]
     fn revolve_visibility_parameter_saves_expands_and_undoes_without_other_appearance_changes() {
         let mut s = Session::new();
         s.execute("file.new", &json!({"width":300,"height":300})).unwrap();

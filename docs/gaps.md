@@ -1,6 +1,6 @@
 # Gaps
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (G4: proportional vertical metrics done, #966; G11: Shape Builder merge seams on grids of lines fixed, #893; scaled text controls corrected, #1034; group font-size preservation deferred) · **Target:** Adobe Illustrator 2026 (30.x)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (G4: proportional vertical metrics done, #966; G11: Shape Builder merge seams on grids of lines fixed, #893; scaled text controls corrected, #1034; group font-size preservation deferred; Revolve circular end caps and optional vector smooth shading added, rim spike correction and continuous curved caps, scores and estimates unchanged) · **Target:** Adobe Illustrator 2026 (30.x)
 
 Every known shortfall against Illustrator, one entry each, **ranked by how much it stops a professional from
 switching**. This is the work list: unless you were given a task, pick the highest-ranked gap you can make
@@ -145,8 +145,8 @@ from G14 and the budget run of G15: **~170–270 h** one agent, ~50–80 h wall 
 
 ## G3 3D and Materials
 
-- **Done:** an initial live Revolve in the `three-d` crate (#846, from the contributor who offered in #605).
-- **Missing:** Extrude & Bevel, Inflate and Rotate, caps, materials and better lighting, exact visibility for
+- **Done:** an initial live Revolve in the `three-d` crate (#846, from the contributor who offered in #605), with optional continuous curved caps for open profiles and smooth shading using vector gradients and bounded seam joins that prevent rim spikes.
+- **Missing:** Extrude & Bevel, Inflate and Rotate, angular cut caps, materials and better lighting, exact visibility for
   intersecting surfaces, 3D Classic, Turntable, 3D export (OBJ, USDA, glTF).
 - **Impact:** specialist, but a visible menu of stubs.
 - **Estimate:** 45–75 h, the largest single gap; plan in `plan/` before coding.
@@ -203,6 +203,7 @@ from G14 and the budget run of G15: **~170–270 h** one agent, ~50–80 h wall 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-11 | minor | Revolve: optional circular end caps for open profiles, including sector caps for partial sweeps, and smooth diffuse shading using vector gradients with sharp profile corners and flat caps, plus bounded seam joins that prevent rim spikes at high zoom and single curved caps with matching body rims; angular cut sides remain open. Scores and hour estimates unchanged at this rounding |
 | 2026-10-11 | minor | G4: proportional vertical metrics (#966) done; estimate unchanged |
 | 2026-10-11 | minor | G11: #893 fixed (merged regions of crossing lines left seams); #937 still open, estimate unchanged |
 | 2026-10-11 | minor | #1034: corrected scaled type controls; optional group font-size preservation remains separate. Estimates unchanged at this rounding. |

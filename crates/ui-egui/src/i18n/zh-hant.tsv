@@ -3529,3 +3529,11 @@ lighting	Light	光源
 	Move Guide to Layer	將參考線移至圖層
 	Linux Display Server	Linux 顯示伺服器
 	X11 (XWayland)	X11 (XWayland)
+
+# Revolve endpoint caps
+	Cap open ends	封閉開放端部
+	Close the circular ends of open profiles. Partial sweeps keep their cut sides open.	封閉開放輪廓的圓形端部。部分旋轉的切割側面保持開放。
+
+	Smooth shading	平滑著色
+
+	Smooth curved surfaces with vector gradients. Profile corners and end caps stay sharp.	使用向量漸層平滑曲面。輪廓轉角和端蓋保持銳利。

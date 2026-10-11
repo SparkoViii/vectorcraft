@@ -89,6 +89,18 @@ fn controls(app: &VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) {
     number(ui, d, "perspective", tl!("Perspective"), (0.0, 100.0), "%", 1, None);
     ui.add_space(6.0);
     egui::CollapsingHeader::new(tl!("Advanced")).id_salt("revolve-advanced").show(ui, |ui| {
+        ui.horizontal(|ui| {
+            let mut cap = d.bool("capEnds");
+            let tip = tl!("Close the circular ends of open profiles. Partial sweeps keep their cut sides open.");
+            if widgets::check_tip(ui, tl!("Cap open ends"), cap, true, tip) {
+                cap = !cap;
+                d.fields.insert("capEnds".into(), json!(cap));
+            }
+            ui.add_space((ui.available_width() - 24.0).max(0.0));
+            if reset_dot(ui, "capEnds", cap, "false") {
+                d.fields.insert("capEnds".into(), json!(false));
+            }
+        });
         number(ui, d, "segments", tl!("Segments"), (8.0, 128.0), "", 0, None);
         super::form::check(ui, d, "__showAxis", tl!("Show axis"));
         ui.add_space(6.0);
@@ -122,6 +134,17 @@ fn lighting_controls(ui: &mut egui::Ui, d: &mut Dialog) {
         }
     });
     ui.add_enabled_ui(d.bool("shade"), |ui| {
+        ui.horizontal(|ui| {
+            let smooth = d.bool("smoothShading");
+            let tip = tl!("Smooth curved surfaces with vector gradients. Profile corners and end caps stay sharp.");
+            if widgets::check_tip(ui, tl!("Smooth shading"), smooth, true, tip) {
+                d.fields.insert("smoothShading".into(), json!(!smooth));
+            }
+            ui.add_space((ui.available_width() - 24.0).max(0.0));
+            if reset_dot(ui, "smoothShading", smooth, "false") {
+                d.fields.insert("smoothShading".into(), json!(false));
+            }
+        });
         number(ui, d, "lightAzimuth", tl!("Direction"), (-360.0, 360.0), "°", 1, None);
         number(ui, d, "lightElevation", tl!("Elevation"), (-90.0, 90.0), "°", 1, None);
         number(ui, d, "lightIntensity", tl!("Intensity"), (0.0, 100.0), "%", 1, None);

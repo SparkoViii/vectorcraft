@@ -744,3 +744,11 @@ lighting	Light	Světlo
 	Sumi-e…	Sumi-e…
 	Vertical Guide	Svislé vodítko
 	Horizontal Guide	Vodorovné vodítko
+
+# Revolve endpoint caps
+	Cap open ends	Uzavřít otevřené konce
+	Close the circular ends of open profiles. Partial sweeps keep their cut sides open.	Uzavře kruhové konce otevřených profilů. Boční řezy částečného otočení zůstávají otevřené.
+
+	Smooth shading	Hladké stínování
+
+	Smooth curved surfaces with vector gradients. Profile corners and end caps stay sharp.	Vyhladit zakřivené povrchy pomocí vektorových přechodů. Rohy profilu a koncové uzávěry zůstanou ostré.
