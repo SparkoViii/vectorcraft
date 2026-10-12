@@ -92,12 +92,32 @@ fn midpoints_come_back() {
         vec![Node::path(
             d.alloc_id(),
             shapes::rectangle(Rect::new(0.0, 0.0, 100.0, 100.0)),
-            Appearance::basic(Paint::Gradient(Box::new(g)), Paint::None, 0.0),
+            Appearance::basic(Paint::Gradient(Box::new(g.clone())), Paint::None, 0.0),
         )]
     });
     let svg = export(&d, &ExportOptions::default());
-    assert_eq!(svg.matches("<stop ").count(), 3, "the midpoint as a stop for other viewers: {svg}");
-    assert!(svg.contains("offset=\"0.25\"") && svg.contains("data-vc-midpoint=\"0.25\""), "{svg}");
+    // The midpoint's curve as stops for other viewers, each marked as standing for it.
+    let stops = svg.matches("<stop ").count();
+    assert!(stops > 3, "{svg}");
+    assert_eq!(svg.matches("data-vc-midpoint=\"0.25\"").count(), stops - 2, "{svg}");
+    // GUARDS: the stops draw the curve `Gradient::sample` draws, half-way grey at the midpoint; 1.5 levels allow the hex rounding.
+    let written: Vec<(f32, f32)> = svg
+        .split("<stop ")
+        .skip(1)
+        .map(|el| {
+            let value = |name: &str| el.split(&format!("{name}=\"")).nth(1).unwrap().split('"').next().unwrap();
+            (value("offset").parse().unwrap(), Color::from_hex(value("stop-color")).unwrap().to_rgb()[0])
+        })
+        .collect();
+    let drawn = |t: f32| {
+        let w = written.windows(2).find(|w| t <= w[1].0).unwrap();
+        w[0].1 + (w[1].1 - w[0].1) * (t - w[0].0) / (w[1].0 - w[0].0)
+    };
+    assert!((drawn(0.25) - 0.5).abs() < 1.5 / 255.0, "{written:?}");
+    for i in 0..=100 {
+        let t = i as f32 / 100.0;
+        assert!((drawn(t) - g.gradient.sample(t).0.to_rgb()[0]).abs() < 1.5 / 255.0, "at {t}: {written:?}");
+    }
     let back = import(&svg).unwrap();
     let n = &back.layers[0].children().unwrap()[0];
     let Paint::Gradient(g) = n.appearance.fill_paint() else { panic!("{svg}") };

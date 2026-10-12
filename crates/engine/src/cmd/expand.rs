@@ -321,27 +321,20 @@ fn shared_model(mut colors: impl Iterator<Item = Color>) -> Option<Model> {
 }
 
 /// Where the colour changes along a gradient between parameters `t0` and `t1`: both ends, every
-/// stop between them (in its own colour, so coincident stops keep a sharp edge) and every midpoint
-/// off the centre, as (parameter, colour, opacity) in order, with more between them where they
+/// stop between them (in its own colour, so coincident stops keep a sharp edge) and the curve of
+/// every midpoint off the centre ([`Gradient::expanded`]), as (parameter, colour, opacity) in order, with more between them where they
 /// are over `max_gap` apart. The colour is linear in display RGB between neighbours, as the
 /// canvas draws it.
 fn breaks(g: &Gradient, t0: f64, t1: f64, max_gap: f64) -> Vec<(f64, (Color, f32))> {
     let at = |t: f64| (t, g.sample_with(t as f32, lerp_color));
     let mut v = vec![at(t0)];
-    for (i, s) in g.stops.iter().enumerate() {
+    for s in &g.stops {
         let o = s.offset as f64;
         if o > t0 && o < t1 {
             v.push((o, (s.color, s.opacity)));
         }
-        if let Some(n) = g.stops.get(i + 1)
-            && (s.midpoint - 0.5).abs() > 1e-3
-        {
-            let m = (s.offset + (n.offset - s.offset) * s.midpoint) as f64;
-            if m > t0 && m < t1 {
-                v.push(at(m));
-            }
-        }
     }
+    v.extend(g.expanded().filter(|(.., mid)| mid.is_some()).map(|(t, ..)| t as f64).filter(|t| *t > t0 && *t < t1).map(at));
     v.push(at(t1));
     v.sort_by(|a, b| a.0.total_cmp(&b.0));
     let mut out = Vec::with_capacity(v.len());
@@ -454,5 +447,26 @@ impl Frame {
                 (PathData::single(SubPath::polyline(&pts, true)), color(k))
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // GUARDS: an expanded gradient follows the midpoint curve the canvas draws, not one knee at the midpoint.
+    #[test]
+    fn breaks_follow_the_midpoint_curve() {
+        let mut g = Gradient::default();
+        g.stops[0].midpoint = 0.25;
+        let br = breaks(&g, 0.0, 1.0, f64::INFINITY);
+        assert!(br.len() > 3, "{br:?}");
+        for i in 0..=200 {
+            let t = i as f64 / 200.0;
+            let w = br.windows(2).find(|w| t <= w[1].0).unwrap();
+            let u = ((t - w[0].0) / (w[1].0 - w[0].0)) as f32;
+            let (a, b) = (w[0].1.0.to_rgb()[0], w[1].1.0.to_rgb()[0]);
+            assert!((a + (b - a) * u - g.sample_with(t as f32, lerp_color).0.to_rgb()[0]).abs() < 1.0 / 255.0, "at {t}");
+        }
     }
 }
