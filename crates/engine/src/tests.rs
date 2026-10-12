@@ -764,6 +764,60 @@ fn a_transform_that_moves_nothing_records_no_undo_step() {
     assert_eq!(count(&s), n + 1);
 }
 
+/// #1408: with anchors selected with Direct Selection, the Transform commands and tools transform
+/// those anchors alone, about the centre of their own box; a copy still copies the whole object.
+#[test]
+fn transforms_act_on_direct_selected_anchors() {
+    let mut s = session();
+    let square = json!({"anchors": [{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 100, "y": 100}, {"x": 0, "y": 100}], "closed": true});
+    let id = NodeId(s.execute("path.create", &square).unwrap()["id"].as_u64().unwrap());
+    let points = |s: &Session| -> Vec<(f64, f64)> {
+        let NodeKind::Path { path, .. } = &s.doc().unwrap().doc.node(id).unwrap().kind else { panic!("a path") };
+        path.subpaths[0].anchors.iter().map(|a| (a.p.x.round(), a.p.y.round())).collect()
+    };
+    let top = json!({"id": id.0, "anchors": [[0, 0], [0, 1]]});
+    s.execute("select.anchors", &top).unwrap();
+    let cases = [
+        ("object.scale", json!({"sx": 50}), [(25.0, 0.0), (75.0, 0.0)]),
+        ("object.scale", json!({"sx": 50, "origin": [0, 100]}), [(0.0, 50.0), (50.0, 50.0)]),
+        ("object.rotate", json!({"angle": 90}), [(50.0, 50.0), (50.0, -50.0)]),
+        ("object.reflect", json!({"axis": "vertical"}), [(100.0, 0.0), (0.0, 0.0)]),
+        ("object.shear", json!({"angle": 45, "axis": "vertical", "origin": [0, 0]}), [(0.0, 0.0), (100.0, 100.0)]),
+        ("object.move", json!({"dx": 10, "dy": -10}), [(10.0, -10.0), (110.0, -10.0)]),
+        ("object.transform", json!({"matrix": [1, 0, 0, 1, 5, 5], "anchors": true}), [(5.0, 5.0), (105.0, 5.0)]),
+    ];
+    for (cmd, p, [a, b]) in cases {
+        s.execute(cmd, &p).unwrap();
+        assert_eq!(points(&s), [a, b, (100.0, 100.0), (0.0, 100.0)], "{cmd} {p}");
+        s.execute("edit.undo", &json!({})).unwrap();
+        s.execute("select.anchors", &top).unwrap();
+    }
+    // Transform Again repeats it on the anchors.
+    s.execute("object.move", &json!({"dx": 10, "dy": 0})).unwrap();
+    s.execute("object.transformAgain", &json!({})).unwrap();
+    assert_eq!(points(&s), [(20.0, 0.0), (120.0, 0.0), (100.0, 100.0), (0.0, 100.0)]);
+    s.execute("edit.undo", &json!({})).unwrap();
+    s.execute("edit.undo", &json!({})).unwrap();
+    s.execute("select.anchors", &top).unwrap();
+    // Without `anchors`, object.transform (the Selection tool's) takes the whole path, and so does a copy.
+    s.execute("object.transform", &json!({"matrix": [1, 0, 0, 1, 5, 5]})).unwrap();
+    assert_eq!(points(&s), [(5.0, 5.0), (105.0, 5.0), (105.0, 105.0), (5.0, 105.0)]);
+    s.execute("edit.undo", &json!({})).unwrap();
+    s.execute("select.anchors", &top).unwrap();
+    let copies = s.execute("object.scale", &json!({"sx": 50, "copy": true})).unwrap();
+    assert_eq!(copies["ids"].as_array().unwrap().len(), 1);
+    assert_eq!(points(&s), [(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)], "the original stays");
+    s.execute("edit.undo", &json!({})).unwrap();
+    s.execute("select.anchors", &top).unwrap();
+    // The Scale tool: a drag from (100, 50) to (75, 50) halves the top edge about its centre (50, 0).
+    let v = ViewInfo::default();
+    s.select_tool("scale", v).unwrap();
+    s.pointer(&PointerEvent::new(PointerKind::Down, 100.0, 50.0), v).unwrap();
+    s.pointer(&PointerEvent::new(PointerKind::Drag, 75.0, 50.0), v).unwrap();
+    s.pointer(&PointerEvent::new(PointerKind::Up, 75.0, 50.0), v).unwrap();
+    assert_eq!(points(&s), [(25.0, 0.0), (75.0, 0.0), (100.0, 100.0), (0.0, 100.0)]);
+}
+
 /// Arrange commands that leave the stacking order as it is record no undo step: Bring to Front and
 /// Bring Forward on the front objects, Send to Back and Send Backward on the back ones, and Send to
 /// Current Layer on objects already on top of the current layer.
@@ -1517,6 +1571,28 @@ fn inspect_lists_everything() {
     assert!(s.commands().len() > 100);
 }
 
+/// A compound path reports the paint that lives on it, and any node reports a blend other than Normal.
+#[test]
+fn inspect_reports_compound_paint_and_blend() {
+    let mut s = session();
+    let a = rect(&mut s, 0.0, 0.0, 40.0, 40.0);
+    let b = rect(&mut s, 10.0, 10.0, 10.0, 10.0);
+    s.execute("select.set", &json!({"ids": [a.0, b.0]})).unwrap();
+    let c = s.execute("object.compoundPath.make", &json!({})).unwrap()["id"].as_u64().unwrap();
+    s.execute("object.setProps", &json!({"id": c, "blend": "Multiply"})).unwrap();
+    let v = s.execute("document.inspect", &json!({})).unwrap();
+    let node = &v["layers"][0]["children"][0];
+    assert_eq!(node["id"], c);
+    assert_eq!(node["kind"], "Compound Path");
+    assert!(node["fill"].as_str().is_some_and(|f| f != "None"), "compound paint: {node}");
+    assert!(node.get("stroke").is_some() && node.get("strokeWidth").is_some(), "{node}");
+    assert_eq!(node["blend"], "Multiply");
+    let plain = rect(&mut s, 80.0, 0.0, 10.0, 10.0);
+    let v = s.execute("document.inspect", &json!({})).unwrap();
+    let plain = v["layers"][0]["children"].as_array().unwrap().iter().find(|n| n["id"] == plain.0).unwrap();
+    assert!(plain.get("blend").is_none(), "Normal is omitted: {plain}");
+}
+
 /// `document.node {summary: true}` answers the `document.inspect` shape for one node:
 /// the same fields the full-tree summary carries, without serializing the whole tree.
 #[test]
@@ -1530,6 +1606,55 @@ fn document_node_summary_matches_inspect() {
     let node = v["layers"][0]["children"].as_array().unwrap().iter().find(|n| n["id"] == id).cloned().unwrap();
     assert_eq!(summary, node, "{summary} vs {node}");
     assert!(s.execute("document.node", &json!({"id": 999999, "summary": true})).is_err());
+}
+
+/// #1389: the paint of a compound path is on the compound, which reports it; its members report
+/// that they are members instead of a paint they don't have. Every node reports a blend mode
+/// that isn't Normal, as it does an opacity below 100%.
+#[test]
+fn inspect_reports_a_compound_paths_paint_and_blend_modes() {
+    let mut s = session();
+    let plain = rect(&mut s, 300.0, 0.0, 50.0, 50.0).0;
+    let (a, b) = (rect(&mut s, 0.0, 0.0, 200.0, 200.0), rect(&mut s, 50.0, 50.0, 100.0, 100.0));
+    s.execute("select.set", &json!({"ids": [a.0, b.0]})).unwrap();
+    s.execute("object.compoundPath.make", &json!({})).unwrap();
+    s.execute("paint.setFill", &json!({"color": "#ff0000"})).unwrap();
+    s.execute("paint.setStroke", &json!({"color": "#0000ff"})).unwrap();
+    s.execute("stroke.set", &json!({"weight": 3})).unwrap();
+    s.execute("object.setProps", &json!({"opacity": 80, "blend": "Color Burn"})).unwrap();
+    let v = s.execute("document.inspect", &json!({})).unwrap();
+    let nodes = v["layers"][0]["children"].as_array().unwrap();
+    let compound = nodes.iter().find(|n| n["kind"] == "Compound Path").unwrap();
+    assert_eq!((&compound["fill"], &compound["stroke"], &compound["strokeWidth"]), (&json!("#ff0000"), &json!("#0000ff"), &json!(3.0)), "{compound}");
+    assert_eq!(compound["blend"], "Color Burn", "{compound}");
+    // The label is what `object.setProps` takes.
+    s.execute("object.setProps", &json!({"blend": compound["blend"]})).unwrap();
+    let members = compound["children"].as_array().unwrap();
+    assert_eq!(members.len(), 2);
+    for m in members {
+        assert_eq!(m["compoundMember"], true, "{m}");
+        assert!(["fill", "stroke", "strokeWidth", "strokeOptions", "blend"].iter().all(|k| m.get(k).is_none()), "{m}");
+        // One member read on its own says the same.
+        assert_eq!(&s.execute("document.node", &json!({"id": m["id"], "summary": true})).unwrap(), m);
+    }
+    assert_eq!(s.execute("document.node", &json!({"id": compound["id"], "summary": true})).unwrap(), *compound);
+    // A plain object: no blend while it is Normal, nothing about compound paths.
+    let plain = nodes.iter().find(|n| n["id"] == plain).unwrap();
+    assert!(plain.get("blend").is_none() && plain.get("compoundMember").is_none() && plain.get("fill").is_some(), "{plain}");
+    // A group has a blend mode too, and still no paint.
+    s.execute("select.set", &json!({"ids": [plain["id"]]})).unwrap();
+    let g = s.execute("object.group", &json!({})).unwrap()["id"].as_u64().unwrap();
+    s.execute("object.setProps", &json!({"ids": [g], "blend": "Multiply"})).unwrap();
+    let group = s.execute("document.node", &json!({"id": g, "summary": true})).unwrap();
+    assert!(group["blend"] == "Multiply" && group.get("fill").is_none(), "{group}");
+}
+
+#[test]
+fn isolating_an_object_that_doesnt_exist_says_so() {
+    let mut s = session();
+    let e = s.execute("object.isolate", &json!({"id": 999_999})).unwrap_err();
+    assert_eq!(e.to_string(), EngineError::NoNode(NodeId(999_999)).to_string());
+    assert!(!e.to_string().contains("type"), "{e}");
 }
 
 /// `depth` and `childLimit` slice a summary read; a level that shows fewer children

@@ -252,6 +252,11 @@ struct CornerClick {
 }
 
 impl CornerDrag {
+    /// The drag has left the click: the corner radius is changing.
+    pub fn adjusting(&self) -> bool {
+        self.began
+    }
+
     /// Start a drag when the press `ev` is on a widget of the selection (Direct Selection:
     /// `any_path`).
     pub fn hit(cx: &ToolContext, ev: &PointerEvent, any_path: bool) -> Option<Self> {
@@ -632,7 +637,10 @@ mod tests {
         let cx2 = cx(&d, &whole, &p);
         let a = crate::create("selection").pointer(&cx2, &PointerEvent::new(PointerKind::DoubleClick, 190.0, 110.0));
         assert_eq!(a, vec![Action::Dialog(DIALOG.into(), json!({"id": id.0, "corners": [0, 1, 2, 3]}))]);
-        assert!(crate::create("selection").pointer(&cx2, &PointerEvent::new(PointerKind::DoubleClick, 150.0, 150.0)).is_empty());
+        // Off the widgets, the Selection tool's double-click isolates the shape (Double Click To
+        // Isolate) instead.
+        let a = crate::create("selection").pointer(&cx2, &PointerEvent::new(PointerKind::DoubleClick, 150.0, 150.0));
+        assert_eq!(a, vec![Action::Exec("object.isolate".into(), json!({"id": id.0}))]);
     }
 
     /// Hide Corner Widget for angles greater than (#394): a rectangle's right angles hide below
