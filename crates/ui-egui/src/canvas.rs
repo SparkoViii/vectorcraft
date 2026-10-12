@@ -185,9 +185,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
     let v = *app.view().unwrap_or(&View::default());
     let xf = Xf::new(rect, &v);
-    if app.ui.view.rulers && app.ui.screen_mode < 3 {
-        ruler_guides(app, ui, full, rect, &xf);
-    }
+    let origin_preview = if app.ui.view.rulers && app.ui.screen_mode < 3 { ruler_input(app, ui, full, rect, &xf) } else { None };
     panel_drop(app, ui, &resp, &xf);
     context_menu(app, &resp, &xf);
     let painter = ui.painter_at(rect);
@@ -255,6 +253,8 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         pixel,
         smooth_images,
         isolated: st.isolation.map(|id| id.0),
+        // Appearance of Black › On Screen: Display All Blacks as Rich Black.
+        rich_black: app.session.prefs.black_on_screen == "rich",
     };
     // Placed documents' bitmaps are being made: draw again when they are ready.
     if vectorcraft_render::placed_document::busy() {
@@ -310,6 +310,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
             isolated: key.isolated.map(vectorcraft_doc::NodeId),
             // Images far smaller on screen than they are sample their mip levels (#1244).
             image_mips: true,
+            rich_black: key.rich_black,
             ..opts
         };
         // Light documents render synchronously (no lag vs overlays); heavy ones go to the worker.
@@ -435,7 +436,12 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     crate::place::paint_drop_highlight(app, ui.ctx(), &painter, rect);
 
     if app.ui.view.rulers && app.ui.screen_mode < 3 {
-        rulers(ui, full, &xf, app.hover_doc, app.session.general_unit(), &t);
+        if let Some(origin) = origin_preview {
+            let at = xf.to_screen(origin);
+            painter.line_segment([pos2(at.x, rect.top()), pos2(at.x, rect.bottom())], Stroke::new(1.0, t.text_dim));
+            painter.line_segment([pos2(rect.left(), at.y), pos2(rect.right(), at.y)], Stroke::new(1.0, t.text_dim));
+        }
+        rulers(ui, full, &xf, app.hover_doc, app.session.general_unit(), origin_preview.unwrap_or_else(|| app.ruler_origin()), &t);
     }
     if app.ui.task_bar && !revolve_edit && !app.session.tool_busy() && app.ui.screen_mode < 3 {
         task_bar(app, ui, &xf);
@@ -1076,8 +1082,8 @@ fn ruler_rects(full: egui::Rect) -> [egui::Rect; 3] {
 /// A drag from a ruler onto the canvas makes a guide where the button is released (the engine's
 /// `Session::ruler_guide`): a horizontal one from the top ruler, a vertical one from the left
 /// ruler, snapped as a moved guide is (with Shift to the ruler's ticks). Released anywhere else,
-/// it makes none.
-fn ruler_guides(app: &mut VectorcraftApp, ui: &Ui, full: egui::Rect, canvas: egui::Rect, xf: &Xf) {
+/// it makes none. The corner drags the rulers' origin or resets it on a double-click.
+fn ruler_input(app: &mut VectorcraftApp, ui: &Ui, full: egui::Rect, canvas: egui::Rect, xf: &Xf) -> Option<Point> {
     let [top, left, corner] = ruler_rects(full);
     // Right-click on a ruler or the origin box: the document units, to swap between them as
     // Preferences ▸ Units ▸ General does ([`crate::menus::ruler_menu_body`]).
@@ -1104,14 +1110,49 @@ fn ruler_guides(app: &mut VectorcraftApp, ui: &Ui, full: egui::Rect, canvas: egu
             app.status(e.to_string());
         }
     }
-    let corner = ui.interact(corner, egui::Id::new("ruler-corner"), Sense::click());
+    let corner = ui.interact(corner, egui::Id::new("ruler-corner"), Sense::click_and_drag());
     corner.context_menu(|ui| crate::menus::ruler_menu_body(app, ui, &mut unit_clicked));
     if let Some((id, p)) = unit_clicked {
         crate::menus::invoke(app, &id, p);
     }
+    if corner.double_clicked_by(egui::PointerButton::Primary) {
+        let artboard = app.view().map_or(0, |v| v.artboard);
+        if let Err(e) = app.run("document.resetRulerOrigin", json!({"artboard": artboard})) {
+            app.status(e.to_string());
+        }
+    }
+    // Keep previews in the UI: only a release on the canvas edits the document, once. Cancelling
+    // never adds an undo step or interferes with the drawing tool's interaction.
+    let drag_id = egui::Id::new("ruler-origin-drag");
+    let uid = app.session.active().map(|d| d.uid);
+    if corner.drag_started_by(egui::PointerButton::Primary) {
+        ui.data_mut(|d| d.insert_temp(drag_id, (uid, false)));
+    }
+    let mut preview = None;
+    if let Some((started_in, mut cancelled)) = ui.data(|d| d.get_temp::<(Option<u64>, bool)>(drag_id)) {
+        cancelled |= started_in != uid || ui.input(|i| !i.focused || i.key_pressed(egui::Key::Escape));
+        let at = corner.interact_pointer_pos().or_else(|| ui.input(|i| i.pointer.latest_pos())).filter(|p| canvas.contains(*p)).map(|p| xf.to_doc(p));
+        if corner.drag_stopped_by(egui::PointerButton::Primary) {
+            ui.data_mut(|d| d.remove::<(Option<u64>, bool)>(drag_id));
+            if !cancelled
+                && let Some(at) = at
+                && let Err(e) = app.run("document.setRulerOrigin", json!({"x": at.x, "y": at.y}))
+            {
+                app.status(e.to_string());
+            }
+        } else if !ui.input(|i| i.pointer.primary_down()) {
+            ui.data_mut(|d| d.remove::<(Option<u64>, bool)>(drag_id));
+        } else {
+            ui.data_mut(|d| d.insert_temp(drag_id, (started_in, cancelled)));
+            if !cancelled {
+                preview = at;
+            }
+        }
+    }
+    preview
 }
 
-fn rulers(ui: &Ui, full: egui::Rect, xf: &Xf, hover: Option<Point>, unit: Unit, t: &Tokens) {
+fn rulers(ui: &Ui, full: egui::Rect, xf: &Xf, hover: Option<Point>, unit: Unit, origin: Point, t: &Tokens) {
     let p = ui.painter();
     let [top, left, corner] = ruler_rects(full);
     for r in [top, left, corner] {
@@ -1143,7 +1184,7 @@ fn rulers(ui: &Ui, full: egui::Rect, xf: &Xf, hover: Option<Point>, unit: Unit, 
     // (#826): at 0° the top one reads x and the left one y. `draw` gets each tick's distance
     // (screen points) from `from` along the ruler, and its value in `unit`.
     let ticks = |from: Pos2, to: Pos2, axis: vectorcraft_geom::Vec2, draw: &mut dyn FnMut(f32, f64)| {
-        let along = |s: Pos2| xf.to_doc(s).to_vec2().dot(axis);
+        let along = |s: Pos2| (xf.to_doc(s) - origin).dot(axis);
         let (a, b) = (along(from), along(to));
         let mut v = (a / per / minor).floor() * minor;
         while v * per <= b {
@@ -2168,7 +2209,7 @@ mod tests {
         let [top, left, _] = ruler_rects(full);
         for deg in [0.0_f64, 30.0, 90.0, 135.0, 200.0] {
             let xf = Xf { rect: full, zoom: 1.0, center: Point::new(300.0, 200.0), rot: deg.to_radians() };
-            let mut out = ctx.run_ui(Default::default(), |ui| rulers(ui, full, &xf, None, Unit::Points, &Tokens::get(ui.ctx())));
+            let mut out = ctx.run_ui(Default::default(), |ui| rulers(ui, full, &xf, None, Unit::Points, Point::ZERO, &Tokens::get(ui.ctx())));
             out.textures_delta.clear();
             // The ticks' positions along each ruler.
             let along = |ruler: egui::Rect, x: bool| -> Vec<f32> {
@@ -2195,6 +2236,42 @@ mod tests {
             if deg == 0.0 {
                 let origin = xf.to_screen(Point::ZERO).x;
                 assert!(along(top, true).iter().any(|x| (x - origin).abs() < 0.01), "a tick at x = 0");
+            }
+        }
+    }
+
+    #[test]
+    fn ruler_origin_zero_ticks_follow_the_origin_at_any_rotation_and_unit() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let full = egui::Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0));
+        let [top, left, _] = ruler_rects(full);
+        let origin = Point::new(350.25, 250.5);
+        for deg in [0.0_f64, 30.0, 90.0, 200.0] {
+            for unit in [Unit::Points, Unit::Millimeters] {
+                let xf = Xf { rect: full, zoom: 1.7, center: Point::new(300.0, 200.0), rot: deg.to_radians() };
+                let mut out = ctx.run_ui(Default::default(), |ui| rulers(ui, full, &xf, None, unit, origin, &Tokens::get(ui.ctx())));
+                out.textures_delta.clear();
+                let at = xf.to_screen(origin);
+                for (r, horizontal) in [(top, true), (left, false)] {
+                    let zeros: Vec<_> = out
+                        .shapes
+                        .iter()
+                        .filter(|c| c.clip_rect == r)
+                        .filter_map(|c| match &c.shape {
+                            Shape::Text(t) if t.galley.text() == "0" => Some(t.pos),
+                            _ => None,
+                        })
+                        .collect();
+                    // Left-ruler labels are separate digits: a zero in "100" isn't the zero label.
+                    assert!(
+                        zeros.iter().any(|zero| {
+                            let delta = if horizontal { zero.x - 2.0 - at.x } else { zero.y - 2.0 - at.y };
+                            delta.abs() < 0.02
+                        }),
+                        "{deg}°, {unit:?}: zeros at {zeros:?}, origin {at:?}"
+                    );
+                }
             }
         }
     }
@@ -2828,6 +2905,52 @@ mod tests {
         assert!(!smooth(&mut app), "Pixel Preview, off by default");
         app.run("prefs.set", json!({"key": "antiAliasedBitmaps", "value": true})).unwrap();
         assert!(smooth(&mut app), "Pixel Preview, on");
+    }
+
+    /// Appearance of Black › On Screen (#394): Display All Blacks Accurately (the default) shows
+    /// pure CMYK black through the CMYK profile, a dark grey; Display All Blacks as Rich Black
+    /// shows it as RGB black. A rich black shows the same either way.
+    #[test]
+    fn appearance_of_black_on_screen_shows_pure_black_as_rgb_black() {
+        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        app.session.execute("file.new", &json!({"width": 400, "height": 300, "colorMode": "cmyk"})).unwrap();
+        app.canvas.worker_started = true; // render on this thread
+        // Larger than the view: the middle of the art's raster is its fill.
+        let id = app.run("shape.rectangle", json!({"x": -5000, "y": -5000, "width": 10000, "height": 10000})).unwrap()["id"].clone();
+        let fill = |app: &mut VectorcraftApp, cmyk: [u8; 4]| {
+            let [c, m, y, k] = cmyk;
+            app.run("paint.setFill", json!({"ids": [id], "color": {"c": c, "m": m, "y": y, "k": k}})).unwrap();
+        };
+        let ctx = egui::Context::default();
+        // The middle pixel of the art's raster uploaded by one frame, None when it was not re-rendered.
+        let middle = |app: &mut VectorcraftApp| -> Option<[u8; 4]> {
+            let (_, mut delta) = frame_output(app, &ctx);
+            let art = app.canvas.texture.as_ref().unwrap().id();
+            let px = delta.set.iter().find(|e| e.0.eq(&art)).and_then(|e| e.1.last()).map(|d| {
+                let egui::ImageData::Color(img) = &d.image;
+                let [w, h] = img.size;
+                img.pixels[h / 2 * w + w / 2].to_array()
+            });
+            delta.clear();
+            px
+        };
+        let shown = |cmyk: [f32; 4]| vectorcraft_color::Color::cmyk(cmyk[0], cmyk[1], cmyk[2], cmyk[3]).to_rgba8(1.0);
+        let near = |a: [u8; 4], b: [u8; 4]| a.iter().zip(b).all(|(x, y)| x.abs_diff(y) <= 1);
+
+        fill(&mut app, [0, 0, 0, 100]);
+        let accurate = middle(&mut app).expect("the first frame renders the art");
+        assert!(near(accurate, shown([0.0, 0.0, 0.0, 1.0])), "accurate: through the CMYK profile, {accurate:?}");
+        assert!(accurate[..3].iter().all(|v| *v > 10), "accurate: a dark grey, {accurate:?}");
+        app.run("prefs.set", json!({"key": "blackOnScreen", "value": "rich"})).unwrap();
+        assert_eq!(middle(&mut app).expect("the preference change re-renders"), [0, 0, 0, 255], "rich: RGB black");
+
+        fill(&mut app, [60, 40, 40, 100]);
+        let rich = middle(&mut app).expect("re-rendered");
+        assert!(near(rich, shown([0.6, 0.4, 0.4, 1.0])), "a rich black is not pure black: {rich:?}");
+
+        fill(&mut app, [0, 0, 0, 100]);
+        app.run("prefs.set", json!({"key": "blackOnScreen", "value": "accurate"})).unwrap();
+        assert!(near(middle(&mut app).expect("re-rendered"), accurate), "accurate again");
     }
 
     /// Guides & Grid › Show Pixel Grid (Above 600% Zoom) (#394): in Pixel Preview at 600% zoom and

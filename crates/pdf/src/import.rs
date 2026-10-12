@@ -22,7 +22,7 @@ use vectorcraft_geom::{FillRule, PathData};
 use crate::import_color::{Colors, Native};
 use crate::import_mask::{MaskSpec, contains, is_rectangle, luminance, mask_spec, white_cover};
 use crate::import_scan::{FontNames, MAX_NESTING, Ocgs, Scan, all_on, hides_forms, scan_page, tag_key};
-use crate::import_shading::{clipped, extend_clip, fold_stop_opacity, mesh_shading, shading_gradient};
+use crate::import_shading::{clipped, extend_clip, fold_stop_opacity, gradient_shape, mesh_shading, shading_gradient};
 use crate::import_text::{Families, LineFacts, Look, Placement, TextLine, Upright};
 use crate::{CropTo, ImportOptions, ImportReport, PdfError, TextAs};
 
@@ -136,7 +136,7 @@ pub const OFF_ARTBOARD_NOTE: &str =
     "only the PDF-compatible part of this file was read: art outside its artboards is kept in the editor's private data alone, so it doesn't open";
 
 /// Warning: art reaching past the page box was clipped to it.
-pub(crate) const PAST_PAGE_NOTE: &str = "art reaching past the page was clipped to it, as PDF viewers show it";
+pub const PAST_PAGE_NOTE: &str = "art reaching past the page was clipped to it, as PDF viewers show it";
 
 /// Import a PDF, returning the document plus warnings about content that was approximated or skipped.
 pub fn import_with_report(bytes: &[u8], opts: &ImportOptions) -> Result<ImportReport, PdfError> {
@@ -200,6 +200,13 @@ pub fn import_with_report(bytes: &[u8], opts: &ImportOptions) -> Result<ImportRe
     let (mut order, mut known) = (vec![], HashSet::new());
     for (i, &number) in picked.iter().enumerate() {
         let Some(page) = pages.get(number) else { continue };
+        // Artboards on the trim boxes have the bleed boxes round them as the document's bleed
+        // (the widest of the pages' on each side), so the art there shows and prints as bleed.
+        if opts.crop == CropTo::Trim {
+            for (side, b) in doc.setup.bleed.iter_mut().zip(crate::pages::bleed(page)) {
+                *side = side.max(b);
+            }
+        }
         // The chosen box sits at (x, 0); the page draws round it.
         let (init, frame) = crate::pages::frame(page, opts.crop);
         let mut ab = Rect::new(x, 0.0, x + frame.width(), frame.height());
@@ -774,7 +781,7 @@ fn fill_rule(r: hayro_interpret::FillRule) -> FillRule {
 }
 
 /// `p` with every subpath closed: how a fill reads it.
-fn closed_subpaths(p: &BezPath) -> BezPath {
+pub(crate) fn closed_subpaths(p: &BezPath) -> BezPath {
     let mut out = BezPath::new();
     let mut open = false;
     for el in p.elements() {
@@ -1062,6 +1069,9 @@ impl<'p> Builder<'p> {
                     // A rectangle around all of its art (a form's box) clips nothing.
                     grouped(f.children, f.child_groups, group).for_each(|(c, g)| self.emit(c, g));
                     None
+                } else if let Some(shape) = gradient_shape(&clip, &f.children) {
+                    // One path, so tools such as the Shape Builder see the shape, not its box (#1304).
+                    Some(shape)
                 } else {
                     let mut ch = vec![Arc::new(*clip)];
                     ch.extend(f.children);

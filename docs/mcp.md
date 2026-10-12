@@ -496,7 +496,8 @@ pattern fills, placed files or anything else the reader doesn't read on a layer 
 different from its page, opens as before: an EPS as its printed page, a `.ai` file from its PDF content (where plain
 groups open ungrouped), with a warning saying why. Layers look different when they draw an object the page doesn't (or
 miss one it draws), and, for an EPS whose page is the box of its art, when they print art outside it. With
-`textAs: "outlines"` a `.ai` file whose type shows opens from its PDF content, which has the type's outlines.
+`textAs: "outlines"` a `.ai` file whose type shows opens from its PDF content, which has the type's outlines. A PDF
+saved with Illustrator's editing data holds it in `AIPDFPrivateData` streams and opens from it as a `.ai` file does.
 
 The document then has what the file's page doesn't print: hidden objects and layers, layers that don't print, guides and
 the art outside the artboards, as the app that wrote the file shows them. Exports and `artboard.fitToArt` leave out the
@@ -509,8 +510,9 @@ an EPS as its page, a `.ai` file from its PDF content (a `.ai` saved without PDF
 ```
 
 Opening a PDF (or `.ai`) imports every page as an artboard and layer; `document.open` takes `pages` ("2-3, 5", 1-based),
-`cropTo` (`bounding` (the art's bounds), `art`, `crop` (default), `trim`, `bleed`, `media`: the box each artboard gets)
-and `password` for an encrypted file. `document.pdfInfo` reads a file without opening it: the page count, each page's
+`cropTo` (`bounding` (the art's bounds), `art`, `crop` (default), `trim`, `bleed`, `media`: the box each artboard gets;
+with `trim` the bleed box round it becomes the document's bleed, and a PDF-compatible `.ai` opens on its trim boxes for
+`crop`, its crop box taking the bleed in) and `password` for an encrypted file. `document.pdfInfo` reads a file without opening it: the page count, each page's
 size and boxes, `needsPassword`, and with `thumbnail: n` a PNG of page n. Imported colours keep their model:
 DeviceCMYK and CMYK ICC colours stay CMYK (a file painted mostly in CMYK opens as a CMYK document), DeviceGray is Gray,
 and Separation and DeviceN inks become spot swatches the art links to at its tint (gradient stops too). CMYK images
@@ -749,6 +751,11 @@ locked after the call: the selected objects it hides or locks, selected objects 
 that were already hidden or locked. The key object is cleared when it is one of them, and `edit.undo` selects
 them again with the key object. When the call changes nothing, it records no undo step and still deselects them.
 Other `object.setProps` calls leave the selection unchanged.
+
+`layer.move`, `node.move`, `layer.merge`, `layer.flatten`, `layer.collectInNew`, `dataset.select`, `dataset.next`
+and `dataset.prev` also deselect every selected object that is hidden or locked after the call, such as objects
+moved into a hidden or locked layer or group, or objects that a data set hides. The key object is cleared when it
+is one of them, and `edit.undo` selects them again with the key object.
 
 These Select menu commands select only the objects that `select.all` selects and the objects inside them: every
 `select.same.*` and `select.object.*` command except `select.object.slices`, `select.nextAbove`, `select.nextBelow`
@@ -1140,7 +1147,7 @@ and `layerRows`, the rows highlighted in the panel.
   only in layers or at the top level and objects in layers and groups (an object placed beside a top-level layer goes
   inside it); a row never goes into itself or a row inside it, and a locked layer or group takes nothing. Dragging the
   selected-art square is `layer.move` with the selected objects. `node.move {id, parent?, index}` is the low-level
-  form with the same rules.
+  form with the same nesting rules; unlike `layer.move`, it also moves a row into a locked layer or group.
 - **Buttons**: `layer.new {name?, top?, …options}` (above the current layer at its level; `top` with Ctrl/Cmd),
   `layer.newSublayer {parent?, name?, …options}` (on top of the parent's contents), `layer.delete {ids?}` (rows with
   what they hold; the last layer stays), `layer.locate {id?}` (highlights the selected object's row; the panel opens
@@ -1585,7 +1592,8 @@ The Selection & Anchor Display and General preferences apply to `pointer_gesture
   `object.align`, `object.distribute`, `object.distributeSpacing`, the Selection and transform tools, the dialogs'
   Transform Patterns) and of the same param on the commands that move or duplicate art with an artboard (`artboard.move`
   and the Artboard tool, `artboard.duplicate`, `artboard.rearrange`, `artboard.setProps`): pattern fills and strokes
-  move with the art.
+  move with the art. `object.nudge` (the arrow keys) and `path.moveAnchors` (a Direct Selection drag of selected
+  anchors) take the same param, with the same default, for the objects they move whole.
 - `selectSameTintPercent` (off by default): `select.same.fillColor`, `strokeColor` and `fillAndStroke` take every tint
   of a global or spot swatch; on, only the same tint.
 
@@ -1607,10 +1615,12 @@ control channel's `ui.drag` scrubs), `showHomeScreen` (on by default: the Home s
 off, an empty window, and the Home button or `app.home` still shows the screen), `autoCollapseIconPanels` (off by
 default: on, a click away from a panel popped out of the icon column puts it away), `displayPrintSize` (off by
 default: View › Actual Size / `view.actualSize` is one document point per screen point; on, one document inch fills
-96 screen points, an inch at the system's reference density whatever the display scaling) and
+96 screen points, an inch at the system's reference density whatever the display scaling),
 `highlightAlternateGlyphs` (on by default: the canvas paints a pink cell behind glyphs OpenType features
 substituted — ligatures, contextual forms — on screen; Document Setup's Highlight Substituted Fonts / Glyphs stay
-separate).
+separate). `blackOnScreen` (Appearance of Black › On Screen, `accurate` by default) sets how the canvas shows
+pure CMYK black, black ink alone at 100%: `accurate` shows it through the CMYK profile, a dark grey, and `rich`
+shows it as RGB black. Rich blacks, black tints and images show the same either way, and exports are unchanged.
 
 `gridlineEvery` (72 pt by default) and `gridSubdivisions` (8 by default) set the document grid that View › Show Grid
 draws, and View › Snap to Grid snaps to its subdivisions. Changing either sets the grid of every open document.
@@ -1692,10 +1702,15 @@ Not read yet: Spacing Guides (the tools draw none).
   Type → Font menus label a family by its native-language name when the font has one. `text.fontList` and
   `text.setStyle {font}` always use the English (canonical) family name; a document may still name a font by any of
   its aliases (`ヒラギノ角ゴシック` resolves to Hiragino Sans).
+- `highlightAlternateGlyphs` (on by default): Preferences › Type › Highlight Alternate Glyphs. Off, the canvas no
+  longer paints pink behind OpenType substitutions (ligatures, contextual forms). Document Setup's Highlight
+  Substituted Fonts / Glyphs stay separate. Agents set it with `prefs.set`; the desktop canvas reads it on the next
+  paint.
 
 ```json
 {"name":"run_command","arguments":{"command":"prefs.set","params":{"values":{"typeSizeIncrement":4,"trackingIncrement":50}}}}
 {"name":"run_command","arguments":{"command":"prefs.set","params":{"key":"fontNamesInEnglish","value":false}}}
+{"name":"run_command","arguments":{"command":"prefs.set","params":{"key":"highlightAlternateGlyphs","value":false}}}
 {"name":"run_command","arguments":{"command":"type.step","params":{"attribute":"tracking","by":-2}}}
 ```
 
