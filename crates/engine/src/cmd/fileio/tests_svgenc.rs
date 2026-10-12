@@ -60,8 +60,12 @@ fn a_chosen_artboard_s_svg_holds_only_its_own_art() {
     let (first, third) = (x(&s, 0), x(&s, 2));
     s.execute("shape.rectangle", &json!({"x": first + 10.0, "y": 10, "width": 30, "height": 30})).unwrap();
     s.execute("shape.ellipse", &json!({"x": third + 10.0, "y": 10, "width": 30, "height": 30})).unwrap();
-    // A rectangle has straight sides only; the ellipse is curves.
-    let shapes = |svg: &str| (svg.matches("<path").count() + svg.matches("<rect").count(), svg.contains(" C") || svg.contains("<ellipse"));
+    // A rectangle has straight sides only; the ellipse is curves. The artboard's clip path in
+    // `<defs>` is not a shape.
+    let shapes = |svg: &str| {
+        let body = svg.split_once("</defs>").map_or(svg, |(_, b)| b);
+        (body.matches("<path").count() + body.matches("<rect").count(), body.contains(" C") || body.contains("<ellipse"))
+    };
     let text = |v: &serde_json::Value| v["text"].as_str().unwrap().to_string();
     let third_only = text(&s.execute("document.serialize", &json!({"format": "svg", "useArtboards": true, "range": "3"})).unwrap());
     assert_eq!(shapes(&third_only), (1, true), "{third_only}");
@@ -73,4 +77,25 @@ fn a_chosen_artboard_s_svg_holds_only_its_own_art() {
     assert_eq!(shapes(&screen), (1, false));
     let whole = text(&s.execute("document.serialize", &json!({"format": "svg"})).unwrap());
     assert_eq!(shapes(&whole).0, 2, "nothing named: the whole document's art");
+}
+
+/// Art crossing a chosen artboard's edge is clipped to it, so the file shows the artboard alone
+/// wherever it goes: placed back it is the artboard's size, not the art's.
+#[test]
+fn a_chosen_artboard_s_svg_is_clipped_to_it() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 200, "height": 100})).unwrap();
+    // Sticks out 50 pt past the right edge and 20 pt above the top.
+    s.execute("shape.rectangle", &json!({"x": 100, "y": -20, "width": 150, "height": 60})).unwrap();
+    let svg = s.execute("document.serialize", &json!({"format": "svg", "useArtboards": true, "range": "all"})).unwrap();
+    let svg = svg["text"].as_str().unwrap().to_string();
+    assert!(svg.contains("<clipPath"), "{svg}");
+    let mut o = Session::new();
+    o.execute("file.new", &json!({"width": 600, "height": 600})).unwrap();
+    let data = vectorcraft_format::base64_encode(svg.as_bytes());
+    let r = o.execute("file.place", &json!({"name": "a.svg", "dataBase64": data, "link": false})).unwrap();
+    assert_eq!((r["width"].as_f64().unwrap(), r["height"].as_f64().unwrap()), (200.0, 100.0), "the artboard, not the art: {r}");
+    // Without artboards the file is the art's bounds and needs no clip.
+    let bounds = s.execute("document.serialize", &json!({"format": "svg", "useArtboards": false})).unwrap();
+    assert!(!bounds["text"].as_str().unwrap().contains("<clipPath"));
 }
