@@ -25,7 +25,7 @@ against Illustrator's public documentation; **estimated** unless noted.
 | Character and Paragraph panels, styles with overrides | done | mixed-value display for differing paragraphs missing |
 | Character size and horizontal scale after object/group scaling | done | #1034: fields and setters compensate the stored affine; point size follows the transformed em-height axis, not the glyph ink bounds. Range edits, keyboard increments, leading and baseline shift use document points; rotation, reflection and shear remain editable. |
 | Preserve font sizes while scaling a group | missing | Separate enhancement; scaling still scales text with the other artwork. |
-| OpenType panel, Glyphs panel, alternates | done | Highlight Alternate Glyphs preference unused (#394) |
+| OpenType panel, Glyphs panel, alternates | done | Highlight Alternate Glyphs preference (#394) paints pink behind OpenType substitutions on screen |
 | Font menu: samples, live preview, filters, favourites; font matching by any name; Find Font | done | #339; script filter: Japanese, Latin, Thai |
 | Missing glyphs set in an installed font made for their script (Thai, Lao, Khmer, Myanmar first; then any font that has them) | done | Thai: Leelawadee UI, Tahoma, Thonburi, Sukhumvit Set, Noto Sans Thai, TLWG |
 | Full font-name matching (OpenType name ID 4) | done | #1258: loaded/cataloged faces and Missing Fonts searches; localized names and variable default faces; Windows font-service QA pending |
