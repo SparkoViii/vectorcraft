@@ -182,7 +182,9 @@ impl Gradient {
 /// How far a segment has gone from its first stop's colour to the next at `u` (0..1 along it) with
 /// its midpoint at `mid`: `u^N` with `N = ln ½ / ln mid`, the exponential interpolation function of
 /// ISO 32000-1 §7.10.3 (Type 2), so it passes through (mid, ½); for a midpoint before halfway the
-/// same curve runs from the other end, `1 − (1 − u)^N'` with `N' = ln ½ / ln (1 − mid)`.
+/// same curve runs from the other end, `1 − (1 − u)^N'` with `N' = ln ½ / ln (1 − mid)`. That is
+/// how a `.ai` file's own PDF part writes its ramps: every segment a Type 2 function with `N ≥ 1`,
+/// one before halfway reversed through its Type 3 function's `Encode [1 0]`, never `u^N` with `N < 1`.
 /// <https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf>
 pub fn through_midpoint(u: f32, mid: f32) -> f32 {
     let (m, u) = (mid.clamp(0.01, 0.99), u.clamp(0.0, 1.0));
