@@ -118,6 +118,9 @@ impl Server {
     /// Handle one JSON-RPC message; `None` for notifications and responses.
     pub fn handle(&mut self, msg: Value) -> Option<Value> {
         let Value::Object(o) = &msg else { return Some(error(Value::Null, INVALID_REQUEST, "message must be an object")) };
+        if o.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+            return Some(error(Value::Null, INVALID_REQUEST, "`jsonrpc` must be \"2.0\""));
+        }
         let id = o.get("id").cloned();
         let Some(method) = o.get("method").and_then(Value::as_str) else {
             // A response to a server→client request (we send none) — ignore; anything else is invalid.

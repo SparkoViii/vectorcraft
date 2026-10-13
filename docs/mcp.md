@@ -104,6 +104,12 @@ given rather than guarding against other software on the computer.
 
 ## Protocol
 
+Every request and notification must include `"jsonrpc": "2.0"`. A missing or different version
+returns Invalid Request (`-32600`, null id) before running a tool or changing notification state.
+When connected to the app, replies must echo the request id exactly. Invalid JSON or a missing or
+mismatched id discards the connection and reports an uncertain outcome, as a lost reply does;
+the call is never replayed. Inspect the document before retrying an edit.
+
 Newline-delimited JSON-RPC 2.0 on stdio. The revision is **`2025-06-18`**; `2025-03-26` and `2024-11-05` are
 accepted too. Clients requesting `2026-07-28` through `initialize`, or through a request's
 `_meta["io.modelcontextprotocol/protocolVersion"]`, receive `resultType: "complete"`,

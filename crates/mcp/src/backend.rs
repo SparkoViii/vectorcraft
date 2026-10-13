@@ -78,11 +78,23 @@ impl Backend for Remote {
         let id = self.next_id;
         self.next_id += 1;
         let line = json!({"id": id, "method": method, "params": params}).to_string();
-        let reply = self.roundtrip(&line).map_err(|e| {
-            self.conn = None;
-            format!("VectorCraft app at {}: `{method}` failed: {e}; operation may have completed; inspect state before retrying", self.addr)
-        })?;
-        let v: Value = serde_json::from_str(reply.trim()).map_err(|e| format!("bad reply from app: {e}"))?;
+        let v = self
+            .roundtrip(&line)
+            .and_then(|reply| {
+                let v: Value = serde_json::from_str(reply.trim())
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("bad reply from app: {e}")))?;
+                if v.get("id") != Some(&json!(id)) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("bad reply from app: response id does not match request {id}"),
+                    ));
+                }
+                Ok(v)
+            })
+            .map_err(|e| {
+                self.conn = None;
+                format!("VectorCraft app at {}: `{method}` failed: {e}; operation may have completed; inspect state before retrying", self.addr)
+            })?;
         if v.get("ok").and_then(Value::as_bool) == Some(true) {
             Ok(v.get("result").cloned().unwrap_or(Value::Null))
         } else {
