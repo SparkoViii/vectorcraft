@@ -69,14 +69,15 @@ fn span_is_the_part_of_the_gradient_between_two_positions() {
     assert!((grey(&r, 0.0) - 0.25).abs() < 1e-5 && (grey(&r, 1.0) - 0.75).abs() < 1e-5);
     let c = g.span(0.4, 0.4);
     assert!((grey(&c, 0.0) - grey(&c, 1.0)).abs() < 1e-6);
-    // Stops and off-centre midpoints inside the span keep their colours.
+    // Stops and off-centre midpoints inside the span keep their colours (a midpoint's curve within
+    // a level of 8-bit colour, as its stops follow it).
     let mut g3 = Gradient::default();
     g3.stops.insert(1, GradientStop::new(0.5, Color::rgb(1.0, 0.0, 0.0)));
     g3.stops[0].midpoint = 0.25;
     let s3 = g3.span(0.0, 1.0);
     for t in [0.05, 0.125, 0.3, 0.5, 0.7, 0.95] {
         let (a, b) = (g3.sample(t).0.to_rgb(), s3.sample(t).0.to_rgb());
-        assert!(a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-4), "{t}: {a:?} vs {b:?}");
+        assert!(a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1.0 / 255.0), "{t}: {a:?} vs {b:?}");
     }
 }
 

@@ -16,6 +16,7 @@ use krilla::paint::{Fill, LinearGradient, RadialGradient, SpreadMethod, Stop, St
 use krilla::surface::Surface;
 use krilla::text::{Glyph, GlyphId, KrillaGlyph};
 use kurbo::{PathEl, Shape, Vec2};
+use vectorcraft_color::gradient::{midpoint_stops, through_midpoint};
 use vectorcraft_color::{BlendMode, Color, GradientKind, Paint};
 use vectorcraft_doc::{AppearanceItem, Document, LineCap, LineJoin, Node, NodeKind, StrokeAlign, StrokeLayer, TextObject};
 use vectorcraft_effects::stroke::{self, WrittenShape};
@@ -579,6 +580,22 @@ fn to_path(s: &Surface, bp: &BezPath) -> Option<Path> {
     pb.finish()
 }
 
+/// (offset, tint, opacity) stops of gradient `g` whose stops have `tints`, each segment with its
+/// midpoint off halfway given stops along the midpoint curve within a level of 8 bits.
+fn tint_stops(g: &vectorcraft_color::Gradient, tints: &[f32]) -> Vec<(f32, f32, f32)> {
+    let mut out = vec![];
+    for (i, s) in g.stops.iter().enumerate() {
+        let Some(&a) = tints.get(i) else { break };
+        out.push((s.offset, a, s.opacity));
+        let (Some(n), Some(&b)) = (g.stops.get(i + 1), tints.get(i + 1)) else { continue };
+        for u in midpoint_stops(s.midpoint, (b - a).abs().max((n.opacity - s.opacity).abs())) {
+            let v = through_midpoint(u, s.midpoint);
+            out.push((s.offset + (n.offset - s.offset) * u, a + (b - a) * v, s.opacity + (n.opacity - s.opacity) * v));
+        }
+    }
+    out
+}
+
 fn norm(v: f32) -> NormalizedF32 {
     NormalizedF32::new(if v.is_finite() { v.clamp(0.0, 1.0) } else { 1.0 }).unwrap_or(NormalizedF32::ONE)
 }
@@ -703,8 +720,8 @@ impl Exporter<'_> {
     }
 
     /// The stops of a gradient whose every stop is a tint of one spot ink (or paper white, 0% of
-    /// it) as tints of that ink — a Separation shading — with midpoints as explicit stops (the
-    /// tint and opacity there are halfway). `None` for other gradients; one that mixes a spot ink
+    /// it) as tints of that ink — a Separation shading — with midpoints as explicit stops
+    /// ([`tint_stops`]). `None` for other gradients; one that mixes a spot ink
     /// with other colours is written in process colours (the PDF writer has no DeviceN).
     fn spot_stops(&mut self, g: &vectorcraft_color::Gradient) -> Option<Vec<(f32, krilla::color::Color, f32)>> {
         let ink = g.stops.iter().find_map(|s| s.swatch.as_deref().filter(|n| self.doc.swatch(n).is_some_and(|w| w.spot)))?;
@@ -723,18 +740,7 @@ impl Exporter<'_> {
             return None;
         };
         let space = self.separation(ink)?;
-        let tint = |t: f32| -> krilla::color::Color { SepColor::new(q(t), space.clone()).into() };
-        let mut out = vec![];
-        for (i, s) in g.stops.iter().enumerate() {
-            out.push((s.offset, tint(tints[i]), s.opacity));
-            if let Some(n) = g.stops.get(i + 1)
-                && (s.midpoint - 0.5).abs() > 1e-3
-            {
-                let at = s.offset + (n.offset - s.offset) * s.midpoint;
-                out.push((at, tint((tints[i] + tints[i + 1]) / 2.0), (s.opacity + n.opacity) / 2.0));
-            }
-        }
-        Some(out)
+        Some(tint_stops(g, &tints).into_iter().map(|(o, t, a)| (o, SepColor::new(q(t), space.clone()).into(), a)).collect())
     }
 
     /// Warn when `effects` (an object's, a fill's or a stroke's) has a visible raster effect: the
@@ -1662,6 +1668,8 @@ fn embed(blob: &vectorcraft_doc::ImageBlob, interpolate: bool) -> Option<Image> 
 
 #[cfg(test)]
 mod tests {
+    use vectorcraft_color::{Gradient, GradientStop};
+
     use super::*;
 
     #[test]
@@ -1683,5 +1691,29 @@ mod tests {
         s.pop();
         s.finish();
         page.finish();
+    }
+
+    // GUARDS: a Separation shading follows the midpoint curve the canvas draws, not one knee at the midpoint.
+    #[test]
+    fn spot_tints_follow_the_midpoint_curve() {
+        let mut g = Gradient {
+            stops: vec![GradientStop::new(0.0, Color::BLACK), GradientStop { opacity: 0.4, ..GradientStop::new(1.0, Color::WHITE) }],
+            ..Gradient::default()
+        };
+        g.stops[0].midpoint = 0.25;
+        let stops = tint_stops(&g, &[1.0, 0.0]);
+        assert!(stops.len() > 3, "{stops:?}");
+        for i in 0..=200 {
+            let t = i as f32 / 200.0;
+            let w = stops.windows(2).find(|w| t <= w[1].0).unwrap();
+            let u = (t - w[0].0) / (w[1].0 - w[0].0);
+            let v = through_midpoint(t, 0.25);
+            assert!((w[0].1 + (w[1].1 - w[0].1) * u - (1.0 - v)).abs() < 1.0 / 255.0, "tint at {t}");
+            assert!((w[0].2 + (w[1].2 - w[0].2) * u - (1.0 - 0.6 * v)).abs() < 1.0 / 255.0, "opacity at {t}");
+            assert!((w[0].2 + (w[1].2 - w[0].2) * u - g.sample(t).1).abs() < 1.0 / 255.0, "opacity at {t} as the canvas draws it");
+        }
+        let half = stops.windows(2).find(|w| 0.25 <= w[1].0).unwrap();
+        let u = (0.25 - half[0].0) / (half[1].0 - half[0].0);
+        assert!((half[0].1 + (half[1].1 - half[0].1) * u - 0.5).abs() < 1.0 / 255.0, "half the ink at the midpoint");
     }
 }

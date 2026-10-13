@@ -103,10 +103,7 @@ impl Gradient {
             let (a, b) = (&w[0], &w[1]);
             if t <= b.offset {
                 let span = (b.offset - a.offset).max(1e-6);
-                let u = (t - a.offset) / span;
-                // Map through the midpoint: u=mid → 0.5.
-                let m = a.midpoint.clamp(0.01, 0.99);
-                let v = if u < m { 0.5 * u / m } else { 0.5 + 0.5 * (u - m) / (1.0 - m) };
+                let v = through_midpoint((t - a.offset) / span, a.midpoint);
                 return (mix(&a.color, &b.color, v), a.opacity + (b.opacity - a.opacity) * v);
             }
         }
@@ -120,15 +117,21 @@ impl Gradient {
         self.expanded().map(|(t, c, o, _)| (t, c, o)).collect()
     }
     /// [`Self::expanded_stops`], each stop that stands for a midpoint with that midpoint (`None`
-    /// on the gradient's own stops).
+    /// on the gradient's own stops). A segment with a midpoint off halfway gets as many stops as
+    /// following its curve within a level of 8-bit colour takes.
     pub fn expanded(&self) -> impl Iterator<Item = (f32, Color, f32, Option<f32>)> + '_ {
         self.stops.iter().enumerate().flat_map(move |(i, s)| {
-            let mid = self.stops.get(i + 1).filter(|_| (s.midpoint - 0.5).abs() > 1e-3).map(|n| {
-                let t = s.offset + (n.offset - s.offset) * s.midpoint;
-                let (c, o) = self.sample(t);
-                (t, c, o, Some(s.midpoint))
-            });
-            std::iter::once((s.offset, s.color, s.opacity, None)).chain(mid)
+            let mut out = vec![(s.offset, s.color, s.opacity, None)];
+            if let Some(n) = self.stops.get(i + 1).filter(|_| (s.midpoint - 0.5).abs() > 1e-3) {
+                let (a, b) = (s.color.to_rgb(), n.color.to_rgb());
+                let change = (0..3).map(|k| (a[k] - b[k]).abs()).fold((s.opacity - n.opacity).abs(), f32::max);
+                for u in midpoint_stops(s.midpoint, change) {
+                    let t = s.offset + (n.offset - s.offset) * u;
+                    let (c, o) = self.sample(t);
+                    out.push((t, c, o, Some(s.midpoint)));
+                }
+            }
+            out
         })
     }
     /// The same ramp the other way round: the stops in reverse order at mirrored offsets, each
@@ -174,6 +177,52 @@ impl Gradient {
         stops.push(stop(1.0, to));
         Gradient { kind: GradientKind::Linear, stops }
     }
+}
+
+/// How far a segment has gone from its first stop's colour to the next at `u` (0..1 along it) with
+/// its midpoint at `mid`: `u^N` with `N = ln ½ / ln mid`, the exponential interpolation function of
+/// ISO 32000-1 §7.10.3 (Type 2), so it passes through (mid, ½); for a midpoint before halfway the
+/// same curve runs from the other end, `1 − (1 − u)^N'` with `N' = ln ½ / ln (1 − mid)`. That is
+/// how a `.ai` file's own PDF part writes its ramps: every segment a Type 2 function with `N ≥ 1`,
+/// one before halfway reversed through its Type 3 function's `Encode [1 0]`, never `u^N` with `N < 1`.
+/// <https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf>
+pub fn through_midpoint(u: f32, mid: f32) -> f32 {
+    let (m, u) = (mid.clamp(0.01, 0.99), u.clamp(0.0, 1.0));
+    if (m - 0.5).abs() < 1e-6 {
+        return u;
+    }
+    if m > 0.5 { u.powf(0.5f32.ln() / m.ln()) } else { 1.0 - (1.0 - u).powf(0.5f32.ln() / (1.0 - m).ln()) }
+}
+
+/// Where stops (0..1 along a segment, strictly inside, in order) make straight lines follow
+/// [`through_midpoint`] for `mid` within a level of 8-bit colour, for a segment whose ends differ
+/// by `change` (0..1) in the channel that changes most. None for a centred midpoint.
+pub fn midpoint_stops(mid: f32, change: f32) -> Vec<f32> {
+    let mut us = vec![];
+    if (mid - 0.5).abs() > 1e-3 {
+        curve_stops(0.0, 1.0, mid, 1.0 / 255.0 / change.max(1e-6), 0, &mut us);
+    }
+    us
+}
+
+/// The places strictly inside `lo..hi` where stops make straight lines follow
+/// [`through_midpoint`] within `tolerance`, in order.
+fn curve_stops(lo: f32, hi: f32, mid: f32, tolerance: f32, depth: u32, out: &mut Vec<f32>) {
+    let half = (lo + hi) / 2.0;
+    let (a, b) = (through_midpoint(lo, mid), through_midpoint(hi, mid));
+    // The curve is convex or concave throughout: a chord is furthest from it near its middle, and
+    // checking a few points there bounds it.
+    let off = [0.25f32, 0.5, 0.75]
+        .iter()
+        .map(|f| lo + (hi - lo) * f)
+        .map(|u| (a + (b - a) * (u - lo) / (hi - lo) - through_midpoint(u, mid)).abs())
+        .fold(0.0, f32::max);
+    if off <= tolerance || depth >= 8 {
+        return;
+    }
+    curve_stops(lo, half, mid, tolerance, depth + 1, out);
+    out.push(half);
+    curve_stops(half, hi, mid, tolerance, depth + 1, out);
 }
 
 // ---------- stop editing (the Gradient panel, the annotator and agents share these) ----------
@@ -555,7 +604,19 @@ mod tests {
         g.stops[0].midpoint = 0.25;
         // At t = 0.25 we should be half way.
         assert!((g.sample(0.25).0.to_rgb()[0] - 0.5).abs() < 1e-5);
-        assert_eq!(g.expanded_stops().len(), 3);
+        // ISO 32000-1 §7.10.3 exponential interpolation, run from the far end for a midpoint before halfway.
+        let n = 0.5f32.ln() / 0.75f32.ln();
+        assert!((g.sample(0.6).0.to_rgb()[0] - 0.4f32.powf(n)).abs() < 1e-5);
+        // The stops a renderer without midpoints gets follow the curve within a level of 8 bits.
+        let stops = g.expanded_stops();
+        assert!(stops.len() > 3 && stops.len() < 40, "{}", stops.len());
+        for i in 0..=200 {
+            let t = i as f32 / 200.0;
+            let at = stops.windows(2).find(|w| t <= w[1].0).unwrap();
+            let u = (t - at[0].0) / (at[1].0 - at[0].0);
+            let straight = at[0].1.to_rgb()[0] + (at[1].1.to_rgb()[0] - at[0].1.to_rgb()[0]) * u;
+            assert!((straight - g.sample(t).0.to_rgb()[0]).abs() < 1.0 / 255.0, "at {t}");
+        }
     }
 
     #[test]
