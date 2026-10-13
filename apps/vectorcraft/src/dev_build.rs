@@ -23,12 +23,7 @@ pub fn detect() -> Option<DevBuild> {
     let forced = std::env::var("VECTORCRAFT_DEV").ok();
     let exe = std::env::current_exe().ok();
     let root = checkout()?;
-    let dev = match forced.as_deref() {
-        Some("1") => true,
-        Some("0") => false,
-        _ => exe.as_deref().is_some_and(|e| in_profile_dir(e) && root.join("Cargo.toml").is_file()),
-    };
-    if !dev {
+    if !is_dev(forced.as_deref(), exe.as_deref(), root) {
         return None;
     }
     let (branch, commit, changes) = git_status(root).map(|s| parse_git_status(&s)).unwrap_or_default();
@@ -37,6 +32,18 @@ pub fn detect() -> Option<DevBuild> {
         .and_then(|built| SystemTime::now().duration_since(built).ok())
         .map(|d| d.as_secs_f64());
     Some(DevBuild { checkout: root.display().to_string(), branch, commit, changes, age_at_start })
+}
+
+/// `VECTORCRAFT_DEV` (`1` / `0`) decides, else the binary must sit in a cargo profile directory and
+/// the checkout it was built from must still be there. Packaged builds fail both: the installers
+/// copy the binary out of the target directory (`/usr/bin`, `VectorCraft.app`, Program Files…),
+/// and the checkout they were built from is the release machine's, absent where they are installed.
+fn is_dev(forced: Option<&str>, exe: Option<&Path>, checkout: &Path) -> bool {
+    match forced {
+        Some("1") => true,
+        Some("0") => false,
+        _ => exe.is_some_and(|e| in_profile_dir(e) && checkout.join("Cargo.toml").is_file()),
+    }
 }
 
 /// The binary sits in a cargo profile directory: `target/release` or `target/debug` (also under a
@@ -110,6 +117,35 @@ mod tests {
         ] {
             assert!(!in_profile_dir(Path::new(installed)), "{installed}");
         }
+    }
+
+    /// Installer and archive builds never show the tag: they run from an install directory, or,
+    /// unpacked into a folder that happens to be called `release`, without the release machine's
+    /// checkout. `VECTORCRAFT_DEV=0` turns it off even in a checkout, `=1` on anywhere.
+    #[test]
+    fn packaged_builds_are_never_dev() {
+        let here = checkout().unwrap();
+        // The release machine's checkout, which isn't on the machine the build is installed on.
+        let gone = std::env::temp_dir().join(format!("vc-release-checkout-{}", std::process::id()));
+        let release_machine = gone.as_path();
+        assert!(!release_machine.exists());
+        for exe in [
+            "/usr/bin/vectorcraft",
+            "/usr/local/bin/vectorcraft",
+            "/home/u/.cargo/bin/vectorcraft",
+            "/app/bin/vectorcraft",
+            "/Applications/VectorCraft.app/Contents/MacOS/VectorCraft",
+            "C:/Program Files/VectorCraft/vectorcraft.exe",
+            "/home/u/Downloads/release/vectorcraft",
+            "/src/vc/dist/release/vectorcraft",
+        ] {
+            assert!(!is_dev(None, Some(Path::new(exe)), release_machine), "{exe}");
+        }
+        let built = here.join("target/release/vectorcraft");
+        assert!(is_dev(None, Some(&built), here), "cargo run in this checkout");
+        assert!(!is_dev(Some("0"), Some(&built), here), "VECTORCRAFT_DEV=0");
+        assert!(is_dev(Some("1"), Some(Path::new("/usr/bin/vectorcraft")), release_machine), "VECTORCRAFT_DEV=1");
+        assert!(!is_dev(None, None, here), "no executable path");
     }
 
     #[test]
