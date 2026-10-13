@@ -2238,6 +2238,9 @@
 	Path Eraser	Tẩy đường dẫn
 	Path Eraser Tool	Công cụ Tẩy đường dẫn
 	Path:	Đường dẫn:
+	Length:	Độ dài:
+	Path Length	Độ dài đường dẫn
+	Selection has no length to scale	Vùng chọn không có độ dài để chia tỷ lệ
 	Pathfinder	Pathfinder
 	Pathfinder Options…	Tùy chọn Pathfinder…
 	Pathfinders:	Pathfinder:
@@ -2907,6 +2910,7 @@
 	Set Bounds	Đặt vùng giới hạn
 	Set Current Layer	Đặt lớp hiện tại
 	Set Keyboard Shortcut	Đặt phím tắt
+	Set Length	Đặt độ dài
 	Set Mesh Point Color	Đặt màu điểm lưới
 	Set Preference	Đặt tùy chọn
 	Set Slice Rectangle	Đặt hình chữ nhật lát cắt

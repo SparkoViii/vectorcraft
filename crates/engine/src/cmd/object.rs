@@ -486,7 +486,7 @@ fn set_length(s: &mut Session, p: &Value) -> Result<Value> {
     if len <= 0.0 {
         return Err(bad("object.setLength", "length must be greater than zero"));
     }
-    apply_transform(s, "Set Length", ids, about(o, Affine::scale(len / cur)), p)
+    apply_transform(s, "Set Length", ids, about(o, Affine::scale(len / cur)), p, true)
 }
 
 fn reflect(s: &mut Session, p: &Value) -> Result<Value> {
