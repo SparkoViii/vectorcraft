@@ -1002,7 +1002,7 @@ pub fn menu(app: &mut VectorcraftApp, ui: &mut Ui) {
 }
 
 fn library_refs(libs: Vec<swatchlib::LibraryInfo>) -> Vec<LibraryRef> {
-    libs.into_iter().map(|l| LibraryRef { submenu: library_panel::submenu(l.category), id: l.id, name: l.name }).collect()
+    libs.into_iter().map(|l| LibraryRef { submenu: library_panel::submenu(l.category), id: l.id, name: l.name, missing: l.missing }).collect()
 }
 
 /// The swatch libraries with solid colours (not the gradient-only ones), for Limit to Library.
@@ -1015,7 +1015,8 @@ pub(crate) fn colour_libraries(app: &VectorcraftApp) -> Vec<LibraryRef> {
 pub(crate) const DOCUMENT_SWATCHES: &str = "Document Swatches";
 
 /// The name of Limit to Library choice `key` (a library id or [`swatchlib::DOCUMENT_SWATCHES`]);
-/// `None` for no limit or a library that is gone.
+/// `None` for no limit, a library listed as missing ([`limit_label`] names it) or a library that
+/// is gone.
 pub(crate) fn limit_name(app: &VectorcraftApp, key: &str) -> Option<String> {
     match key {
         "" => None,
@@ -1024,13 +1025,30 @@ pub(crate) fn limit_name(app: &VectorcraftApp, key: &str) -> Option<String> {
     }
 }
 
+/// Limit to Library choice `key` as Color Guide and Image Trace show it: [`limit_name`] as
+/// [`library_panel::library_name`] shows it, or for a library listed as missing, the name that
+/// [`library_panel::missing_name`] gives it; `None` for no limit or a library that is gone.
+pub(crate) fn limit_label(app: &VectorcraftApp, key: &str) -> Option<String> {
+    match limit_name(app, key) {
+        Some(name) => Some(library_panel::library_name(key, &name).to_string()),
+        None => app.session.swatch_libraries.missing(key).map(|(info, _)| library_panel::missing_name(&info.name)),
+    }
+}
+
 /// The Limit to Library key for `l`: a library's id (from its id or name), or
-/// [`swatchlib::DOCUMENT_SWATCHES`] as it is.
+/// [`swatchlib::DOCUMENT_SWATCHES`] as it is. For a library listed as missing, it returns an error
+/// that names the library's file.
 pub(crate) fn limit_key(app: &VectorcraftApp, l: &str) -> Result<String, String> {
     if l == swatchlib::DOCUMENT_SWATCHES {
         return Ok(l.into());
     }
-    swatchlib::library(&app.session, l).map(|(info, _)| info.id).ok_or_else(|| format!("no swatch library `{l}` (see swatch.library.list)"))
+    let id = swatchlib::library(&app.session, l).map(|(info, _)| info.id);
+    if id.is_none()
+        && let Some(e) = app.session.swatch_libraries.missing_error(l)
+    {
+        return Err(e.to_string());
+    }
+    id.ok_or_else(|| format!("no swatch library `{l}` (see swatch.library.list)"))
 }
 
 /// Swatch libraries in the library panel (engine: `swatch.library.*`).
@@ -1039,6 +1057,7 @@ pub(crate) struct SwatchLibraries;
 impl LibraryKind for SwatchLibraries {
     const KIND: &'static str = "swatches";
     const OPEN: &'static str = "window.swatchLibrary";
+    const REMOVE: &'static str = "swatch.library.remove";
     const MENU: &'static str = "Swatch Libraries Menu";
     const ADD: &'static str = "Add to Swatches";
     type Lib = Arc<SwatchLibrary>;
@@ -1049,6 +1068,9 @@ impl LibraryKind for SwatchLibraries {
     }
     fn get(app: &VectorcraftApp, id: &str) -> Option<(String, Self::Lib)> {
         swatchlib::library(&app.session, id).map(|(info, lib)| (info.name, lib))
+    }
+    fn missing(app: &VectorcraftApp, key: &str) -> Option<(swatchlib::LibraryInfo, String)> {
+        app.session.swatch_libraries.missing(key).map(|(info, path)| (info.clone(), path.to_string()))
     }
     /// Ungrouped swatches, then each colour group's folder and swatches (a group whose name
     /// matches shows all of them), as in the Swatches panel.

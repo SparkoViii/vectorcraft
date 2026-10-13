@@ -39,12 +39,13 @@ fn palette_label(id: &str) -> &'static str {
 }
 
 /// The name of Document Library's library `key` (the document's swatches or a swatch library); a
-/// library that is gone shows its key.
+/// library listed as missing shows its name and "(missing)", and a library that is gone shows its
+/// key.
 fn library_label(app: &VectorcraftApp, key: &str) -> String {
     match swatches::limit_name(app, key) {
         Some(_) if key == DOCUMENT_SWATCHES => tl!(swatches::DOCUMENT_SWATCHES).to_string(),
         Some(name) => library_panel::library_name(key, &name).to_string(),
-        None => key.to_string(),
+        None => swatches::limit_label(app, key).unwrap_or_else(|| key.to_string()),
     }
 }
 
@@ -555,6 +556,27 @@ mod tests {
         assert_eq!(palette(&app), Some(json!("fullTone")));
         let texts = frame(&mut app, &ctx, vec![]);
         assert!(has(&texts, "50") && !has(&texts, "Library:"), "{texts:?}");
+    }
+
+    #[test]
+    fn document_library_names_a_library_listed_as_missing() {
+        let mut app = traced_app();
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let file = format!("vc-trace-panel-{}", std::process::id());
+        let gpl = std::env::temp_dir().join(format!("{file}.gpl")).to_string_lossy().to_string();
+        std::fs::write(&gpl, "GIMP Palette\nName: Trace Inks\n0 0 0 Ink\n255 255 255 Paper\n").unwrap();
+        let id = app.run("swatch.library.load", json!({ "path": gpl })).unwrap()["library"].as_str().unwrap().to_string();
+        app.run("imageTrace.make", json!({"preset": "6 Colors", "params": {"palette": "documentLibrary", "library": id}})).unwrap();
+        assert!(frame(&mut app, &ctx, vec![]).iter().any(|(t, _)| t == "Trace Inks"));
+        // The library is taken off the list and its file is deleted; swatchlib::restore then lists
+        // it as missing.
+        app.run("swatch.library.remove", json!({ "library": id })).unwrap();
+        std::fs::remove_file(&gpl).unwrap();
+        let read = vectorcraft_engine::cmd::swatchlib::read_remembered(std::slice::from_ref(&gpl));
+        vectorcraft_engine::cmd::swatchlib::restore(&mut app.session, read);
+        let texts = frame(&mut app, &ctx, vec![]);
+        assert!(texts.iter().any(|(t, _)| *t == format!("{file} (missing)")), "{texts:?}");
     }
 
     #[test]

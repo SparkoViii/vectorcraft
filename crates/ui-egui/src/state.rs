@@ -353,6 +353,16 @@ pub struct UiState {
     /// The library open in the library panel (Window → Swatch Libraries).
     #[serde(default)]
     pub library_panel: Option<crate::panels::library_panel::OpenLibrary>,
+    /// The files of the swatch libraries opened from files (Other Library…, File › Open, a drop),
+    /// missing ones included, as the desktop host saved them when the app quit:
+    /// [`crate::panels::library_panel::restore_files`] lists them again at launch and empties this.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub swatch_library_files: Vec<String>,
+    /// The files of the graphic style libraries opened from files, missing ones included, as the
+    /// desktop host saved them when the app quit: [`crate::panels::library_panel::restore_files`]
+    /// lists them again at launch and empties this.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub style_library_files: Vec<String>,
     /// Flattener Preview panel: highlight, overprints, preset and options (`ui.flattenerPreview`).
     #[serde(default)]
     pub flattener_preview: crate::panels::flattener_preview::Settings,
@@ -641,6 +651,8 @@ impl Default for UiState {
             engine_prefs: Value::Null,
             color_guide: Default::default(),
             library_panel: None,
+            swatch_library_files: vec![],
+            style_library_files: vec![],
             flattener_preview: Default::default(),
             color_guide_limit: String::new(),
             align_to: Default::default(),

@@ -13,7 +13,7 @@ use vectorcraft_color::harmony::{Guide, GuideOptions, Harmony, Variation};
 use vectorcraft_color::{Color, Paint};
 use vectorcraft_engine::cmd::swatchlib;
 
-use super::swatches::{self, colour_libraries, limit_key, limit_name};
+use super::swatches::{self, colour_libraries, limit_key, limit_label, limit_name};
 use super::{active_paint, apply_click, c32, color_json, library_panel, pstate, set_pstate};
 use crate::VectorcraftApp;
 use crate::widgets::{self, menu_item};
@@ -55,6 +55,9 @@ struct GuideKey {
     limit: String,
     /// The document's identity and revision while limited to its swatches.
     doc: Option<(u64, u64)>,
+    /// Whether [`limit_name`] finds the limit's library: it turns false when the library is taken
+    /// off the list or listed as missing, and true again when its file is loaded again.
+    listed: bool,
 }
 
 /// The guide the panel shows, limited to the Limit to Library colours.
@@ -65,7 +68,7 @@ fn guide(app: &VectorcraftApp, ctx: &egui::Context) -> Guide {
         return Guide::new(base, rule, &opts);
     }
     let doc = app.session.active().filter(|_| limit == swatchlib::DOCUMENT_SWATCHES).map(|d| (d.uid, d.revision));
-    let key = GuideKey { base, rule, opts, limit: limit.clone(), doc };
+    let key = GuideKey { base, rule, opts, limit: limit.clone(), doc, listed: limit_name(app, limit).is_some() };
     if let Some((k, g)) = pstate::<Option<(GuideKey, Guide)>>(ctx, "cg-guide")
         && k == key
     {
@@ -200,8 +203,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         }
     }
     let (left, right) = app.ui.color_guide.variation.sides();
-    let key = &app.ui.color_guide_limit;
-    let limit = limit_name(app, key).map(|n| library_panel::library_name(key, &n).to_string());
+    let limit = limit_label(app, &app.ui.color_guide_limit);
     ui.horizontal(|ui| {
         widgets::dim_label(ui, left);
         // The library the colours are limited to, centred between the ends.
@@ -355,6 +357,36 @@ mod tests {
         assert_eq!(app.ui.color_guide_limit, "document");
         assert_eq!(app.run("ui.colorGuideLimit", json!({"library": ""})).unwrap()["name"], Value::Null);
         assert!(shown(&app, &ctx).contains(&"#3a7bd5".to_string()));
+    }
+
+    #[test]
+    fn the_guide_follows_its_library_off_the_list_and_back() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        let gpl = std::env::temp_dir().join(format!("vc-color-guide-limit-{}.gpl", std::process::id())).to_string_lossy().to_string();
+        let palette = "GIMP Palette\nName: Guide Inks\n200 30 30 Ink Red\n30 30 200 Ink Blue\n";
+        std::fs::write(&gpl, palette).unwrap();
+        app.run("paint.setFill", json!({"color": "#3a7bd5"})).unwrap();
+        let id = app.run("swatch.library.load", json!({ "path": gpl })).unwrap()["library"].as_str().unwrap().to_string();
+        let members = library_hexes(&app, &id);
+        app.run("ui.colorGuideLimit", json!({ "library": id })).unwrap();
+        frame(&mut app, &ctx);
+        assert!(shown(&app, &ctx).iter().all(|h| members.contains(h)), "every cell is a library color");
+        // After swatch.library.remove, the guide is no longer limited to the library's colors.
+        app.run("swatch.library.remove", json!({ "library": id })).unwrap();
+        frame(&mut app, &ctx);
+        assert!(shown(&app, &ctx).contains(&"#3a7bd5".to_string()), "no limit: the base itself");
+        // swatchlib::restore lists the library as missing, and the guide is still not limited.
+        // Loading its file again limits the guide to the library's colors again.
+        std::fs::remove_file(&gpl).unwrap();
+        swatchlib::restore(&mut app.session, swatchlib::read_remembered(std::slice::from_ref(&gpl)));
+        frame(&mut app, &ctx);
+        assert!(shown(&app, &ctx).contains(&"#3a7bd5".to_string()));
+        std::fs::write(&gpl, palette).unwrap();
+        app.run("swatch.library.load", json!({ "path": gpl })).unwrap();
+        frame(&mut app, &ctx);
+        assert!(shown(&app, &ctx).iter().all(|h| members.contains(h)), "loaded again");
+        let _ = std::fs::remove_file(gpl);
     }
 
     #[test]

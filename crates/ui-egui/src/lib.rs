@@ -405,6 +405,9 @@ pub struct VectorcraftApp {
     /// The look for fonts installed or removed while the app was in the background, running
     /// ([`Self::refresh_installed_fonts`]): whether they were.
     font_check: Option<std::sync::mpsc::Receiver<bool>>,
+    /// The libraries opened from files that a worker reads at launch, until they are listed
+    /// ([`panels::library_panel::restore_files`]).
+    pub(crate) library_restore: Option<panels::library_panel::Restore>,
     /// Keyboard pastes of something other than text (see [`shortcuts::PasteChord`]).
     pub(crate) paste_chord: shortcuts::PasteChord,
     /// Saves and exports running in the background (Preferences → File Handling).
@@ -506,6 +509,7 @@ impl VectorcraftApp {
             clipboard_probe: None,
             picks: picks::Picks::default(),
             font_check: None,
+            library_restore: None,
             paste_chord: Default::default(),
             background: Default::default(),
             opening: Default::default(),
@@ -738,6 +742,9 @@ impl VectorcraftApp {
     fn drain_control(&mut self, ctx: &egui::Context) {
         let Some(rx) = self.control_rx.take() else { return };
         while let Ok(req) = rx.try_recv() {
+            // The libraries opened from files before the last quit are listed before the
+            // request runs.
+            panels::library_panel::wait_restore(self);
             let reply = req.reply.clone();
             // Guarded per request: a panic must not drop the channel (taken out of `self` above).
             let roots = self.automation_roots.clone();
@@ -1028,6 +1035,7 @@ impl VectorcraftApp {
             self.system_paste = wanted && self.system_clipboard_pasteable();
         }
         self.poll_font_check(ctx);
+        panels::library_panel::poll_restore(self, ctx);
         picks::poll(self, ctx);
         background::poll(self);
         opening::poll(self);

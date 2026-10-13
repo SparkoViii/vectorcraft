@@ -2301,6 +2301,7 @@
 	Remove blank lines between paragraphs	Supprimer les lignes vides entre les paragraphes
 	Remove Brush Stroke	Supprimer la forme de contour
 	Remove Effect	Supprimer l’effet
+	Remove from Other Libraries	Retirer des Autres bibliothèques
 	Remove Guide	Supprimer le repère
 	Remove Item	Supprimer l’élément
 	Remove Plug-in	Supprimer le module externe
@@ -3279,6 +3280,7 @@
 	{kind} Gradient	Dégradé {kind}
 	{kind} Style Options…	Options de style {kind}…
 	{kind}, {model}	{kind}, {model}
+	{name} (missing)	{name} (manquante)
 	{name} (spot)	{name} (ton direct)
 	{pages} in all, {count} per copy	{pages} au total, {count} par exemplaire
 	{page} of {count}	{page} sur {count}
@@ -3702,6 +3704,7 @@ axis	Both	Les deux
 @msg	no interaction in progress	aucune interaction en cours
 @msg	no key object	aucun objet clé
 @msg	no library `{key}` (see {list})	aucune bibliothèque `{key}` (voir {list})
+@msg	library `{name}` is missing: {path} can't be read	la bibliothèque `{name}` est manquante (impossible de lire {path})
 @msg	no native format	aucun format natif
 @msg	no pages	aucune page
 @msg	no pattern `{name}`	aucun motif `{name}`

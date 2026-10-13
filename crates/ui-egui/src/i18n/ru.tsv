@@ -2300,6 +2300,7 @@
 	Remove blank lines between paragraphs	Убрать пустые строки между абзацами
 	Remove Brush Stroke	Убрать мазок кисти
 	Remove Effect	Убрать эффект
+	Remove from Other Libraries	Убрать из «Другие библиотеки»
 	Remove Guide	Убрать направляющую
 	Remove Item	Убрать элемент
 	Remove Plug-in	Убрать модуль
@@ -3278,6 +3279,7 @@
 	{kind} Gradient	Градиент {kind}
 	{kind} Style Options…	Параметры стиля {kind}…
 	{kind}, {model}	{kind}, {model}
+	{name} (missing)	{name} (отсутствует)
 	{name} (spot)	{name} (плашечный)
 	{pages} in all, {count} per copy	Всего {pages}, по {count} на копию
 	{page} of {count}	{page} из {count}
@@ -3701,6 +3703,7 @@ axis	Both	Оба
 @msg	no interaction in progress	нет взаимодействия в процессе
 @msg	no key object	нет ключевого объекта
 @msg	no library `{key}` (see {list})	нет библиотеки `{key}` (см. {list})
+@msg	library `{name}` is missing: {path} can't be read	библиотека `{name}` отсутствует: невозможно прочитать {path}
 @msg	no native format	нет собственного формата
 @msg	no pages	нет страниц
 @msg	no pattern `{name}`	нет узора `{name}`

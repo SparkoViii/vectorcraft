@@ -2270,6 +2270,7 @@
 	Remove Asset	アセットを削除
 	Remove Brush Stroke	ブラシストロークを削除
 	Remove Effect	効果を削除
+	Remove from Other Libraries	その他のライブラリから削除
 	Remove Guide	ガイドを削除
 	Remove Item	項目を削除
 	Remove Plug-in	プラグインを削除
@@ -2905,6 +2906,7 @@
 	{kind} Gradient	{kind}グラデーション
 	{kind} Style Options…	{kind}スタイルオプション…
 	{kind}, {model}	{kind}、{model}
+	{name} (missing)	{name} (見つかりません)
 	{name} (spot)	{name} (特色)
 	{pages} in all, {count} per copy	合計 {pages}、1 部あたり {count}
 	{page} of {count}	{page} / {count}
@@ -3980,6 +3982,7 @@ theme	Appearance	外観
 @msg	Select text or click into text with the Type tool to insert glyphs	字形を挿入するには、テキストを選択するか、文字ツールでテキスト内をクリックしてください
 @msg	`library` is a library id or name (see {list})	`library` にはライブラリの ID または名前を指定してください ({list} を参照)
 @msg	no library `{key}` (see {list})	ライブラリ `{key}` が見つかりません ({list} を参照)
+@msg	library `{name}` is missing: {path} can't be read	ライブラリ `{name}` が見つかりません: {path} を読み込めません
 @msg	select a linked image: an embedded one has no file	リンク画像を選択してください: 埋め込み画像にはファイルがありません
 @msg	{path} can't be found: relink it first	{path} が見つかりません: 先に再リンクしてください
 @msg	Embedded {n} image(s); {missing} missing: relink them first	画像を {n} 枚埋め込みましたが、{missing} 枚は見つかりません: 先に再リンクしてください

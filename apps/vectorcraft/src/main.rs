@@ -261,6 +261,7 @@ fn save_prefs(app: &VectorcraftApp) {
         let _ = std::fs::create_dir_all(p.parent().unwrap_or(std::path::Path::new(".")));
         let mut ui = app.ui.clone();
         ui.engine_prefs = app.session.prefs.to_json();
+        vectorcraft_ui_egui::panels::library_panel::save_files(app, &mut ui);
         if let Ok(bytes) = serde_json::to_vec_pretty(&ui) {
             // Preferences are best effort: a failed write keeps the previous file.
             let _ = fileio::write_atomic(&p, &bytes);
@@ -808,6 +809,9 @@ fn main() -> std::process::ExitCode {
                     let recovery = prefs_path().and_then(|p| Some(p.parent()?.join("Data Recovery").to_string_lossy().to_string()));
                     app.session.recovery.set_default_folder(recovery);
                 }
+                // A worker reads the swatch and graphic style libraries opened from files before the
+                // last quit, from the files the saved UI state names, and a later frame lists them.
+                file_access::unconfined(|| vectorcraft_ui_egui::panels::library_panel::restore_files(&mut app));
                 let graphics_loss = GraphicsLoss::default();
                 #[cfg(feature = "wgpu")]
                 if let Some(rs) = &cc.wgpu_render_state {

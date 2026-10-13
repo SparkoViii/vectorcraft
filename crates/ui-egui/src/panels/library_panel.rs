@@ -6,11 +6,22 @@
 //! Which library is open lives in `UiState::library_panel` (`window.swatchLibrary` and
 //! `window.graphicStyleLibrary` open one), so agents can open and read it; the view, find text and
 //! selection are panel state.
+//!
+//! The libraries opened from files are listed again at the next launch ([`save_files`],
+//! [`restore_files`]): a worker thread reads their files, and a later frame lists them. One whose
+//! file can't be read then is listed as missing: the panel shows its file and Remove from Other
+//! Libraries instead of its items.
+
+use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
 use egui::{CornerRadius, Rect, Sense, Ui, vec2};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use vectorcraft_engine::cmd::swatchlib::LibraryInfo;
+use vectorcraft_color::SwatchLibrary;
+use vectorcraft_doc::StyleLibrary;
+use vectorcraft_engine::cmd::swatchlib::{LibraryInfo, RememberedFile};
+use vectorcraft_engine::cmd::{stylelib, swatchlib};
+use vectorcraft_engine::file_access::ScopeHandle;
 
 use super::swatches::{View, click_selection, folder_tile, list_row, list_row_name, tile_grid};
 use super::{pstate, set_pstate};
@@ -33,6 +44,8 @@ pub(crate) struct LibraryRef {
     pub name: String,
     /// The submenu it is listed under (`None`: the top level).
     pub submenu: Option<&'static str>,
+    /// Its file couldn't be read when the app started (`LibraryInfo::missing`).
+    pub missing: bool,
 }
 
 /// A row of the panel: an item, or the folder of a group of items (`item` None).
@@ -47,6 +60,9 @@ pub(crate) trait LibraryKind {
     const KIND: &'static str;
     /// The UI command that opens a library in the panel (`{library: id}`).
     const OPEN: &'static str;
+    /// The engine command that takes a library listed under Other Libraries off the list
+    /// (`{library: id}`).
+    const REMOVE: &'static str;
     /// The libraries menu's tooltip ("Swatch Libraries Menu").
     const MENU: &'static str;
     /// What adding the selection is called ("Add to Swatches").
@@ -60,6 +76,9 @@ pub(crate) trait LibraryKind {
     fn list(app: &VectorcraftApp) -> Vec<LibraryRef>;
     /// Library `id`: its name and contents.
     fn get(app: &VectorcraftApp, id: &str) -> Option<(String, Self::Lib)>;
+    /// The library listed as missing that `key` names (an id, or a name in any case), with the file
+    /// that can't be read.
+    fn missing(app: &VectorcraftApp, key: &str) -> Option<(LibraryInfo, String)>;
     /// The rows matching the find field's `query` (lower case; empty: all).
     fn rows<'a>(lib: &'a Self::Lib, query: &str) -> Vec<Row<'a, Self::Item>>;
     /// An item's thumbnail in `r`.
@@ -126,7 +145,8 @@ pub(crate) fn library_name<'a>(id: &str, name: &'a str) -> &'a str {
 
 /// The opener of library `K`'s libraries (`window.swatchLibrary {library}`): open library `library`
 /// (an id or a name; `list`: the command listing them) in the panel, `null` closing it. `found`
-/// looks a library up: its id, name and item count. → {open, name, count}
+/// looks a library up: its id, name and item count. A library listed as missing opens too, with
+/// `missing: true`. → {open, name, count, missing?}
 pub(crate) fn open_command<K: LibraryKind>(
     app: &mut VectorcraftApp,
     p: &Value,
@@ -138,9 +158,16 @@ pub(crate) fn open_command<K: LibraryKind>(
         return Ok(json!({ "open": null }));
     };
     let key = key.as_str().ok_or_else(|| format!("`library` is a library id or name (see {list})"))?;
-    let (id, name, count) = found(app, key).ok_or_else(|| format!("no library `{key}` (see {list})"))?;
+    let (id, name, count, missing) = match found(app, key) {
+        Some((id, name, count)) => (id, name, count, false),
+        None => K::missing(app, key).map(|(info, _)| (info.id, info.name, 0, true)).ok_or_else(|| format!("no library `{key}` (see {list})"))?,
+    };
     app.ui.library_panel = Some(OpenLibrary { kind: K::KIND.into(), id: id.clone() });
-    Ok(json!({"open": id, "name": name, "count": count}))
+    let mut r = json!({"open": id, "name": name, "count": count});
+    if missing {
+        r["missing"] = json!(true);
+    }
+    Ok(r)
 }
 
 /// Other Library…: the library file at `path`, else one picked in an open dialog; `None` when the
@@ -168,11 +195,20 @@ pub(crate) fn user_slot(id: &str, prefix: &str, libraries: Vec<LibraryInfo>) -> 
 }
 
 /// The panel's window: a tab strip with the library's name, the panel menu and a close button, then
-/// the body. A library that no longer exists closes it.
+/// the body. A library listed as missing shows its file instead of its items; a library that no
+/// longer exists closes it. While the libraries opened from files are read at launch
+/// ([`restore_files`]), a library not listed yet shows nothing and the panel stays open.
 fn window<K: LibraryKind>(app: &mut VectorcraftApp, ctx: &egui::Context, id: &str) {
-    let Some((name, lib)) = K::get(app, id) else {
-        app.ui.library_panel = None;
-        return;
+    let (name, lib) = match K::get(app, id) {
+        Some((name, lib)) => (name, Some(lib)),
+        None => match K::missing(app, id) {
+            Some((info, _)) => (info.name, None),
+            None if app.library_restore.is_some() => return,
+            None => {
+                app.ui.library_panel = None;
+                return;
+            }
+        },
     };
     let t = Tokens::get(ctx);
     let mut open = true;
@@ -204,7 +240,10 @@ fn window<K: LibraryKind>(app: &mut VectorcraftApp, ctx: &egui::Context, id: &st
             });
             egui::Frame::NONE.inner_margin(egui::Margin::same(10)).show(ui, |ui| {
                 ui.set_width(236.0);
-                body::<K>(app, ui, id, &lib);
+                match &lib {
+                    Some(lib) => body::<K>(app, ui, id, lib),
+                    None => missing_body::<K>(app, ui, id),
+                }
             });
         });
     });
@@ -286,6 +325,19 @@ fn body<K: LibraryKind>(app: &mut VectorcraftApp, ui: &mut Ui, id: &str, lib: &K
     bottom::<K>(app, ui, id);
 }
 
+/// The body for a library listed as missing: its file, Remove from Other Libraries and the bottom
+/// bar.
+fn missing_body<K: LibraryKind>(app: &mut VectorcraftApp, ui: &mut Ui, id: &str) {
+    let path = K::missing(app, id).map(|(_, path)| path).unwrap_or_default();
+    widgets::dim_name(ui, &crate::i18n::fmt(tl!("Missing: {path}"), &[("path", &path)]));
+    ui.add_space(8.0);
+    if ui.button(tl!("Remove from Other Libraries")).clicked() {
+        remove::<K>(app, id);
+    }
+    ui.add_space(4.0);
+    bottom::<K>(app, ui, id);
+}
+
 /// The library `step` places after (or before, when negative) `id` in menu order, wrapping.
 fn neighbour<K: LibraryKind>(app: &VectorcraftApp, id: &str, step: isize) -> Option<String> {
     let all = K::list(app);
@@ -298,6 +350,21 @@ fn neighbour<K: LibraryKind>(app: &VectorcraftApp, id: &str, step: isize) -> Opt
 fn open<K: LibraryKind>(app: &mut VectorcraftApp, id: &str) {
     if let Err(e) = app.run(K::OPEN, json!({ "library": id })) {
         app.status(e);
+    }
+}
+
+/// Is library `id` listed under Other Libraries? Remove from Other Libraries takes only those off
+/// the list.
+fn other_library<K: LibraryKind>(app: &VectorcraftApp, id: &str) -> bool {
+    K::list(app).iter().any(|l| l.id == id && l.submenu == submenu("loaded"))
+}
+
+/// Remove from Other Libraries: take library `id` off the libraries menus ([`LibraryKind::REMOVE`])
+/// and close the panel.
+fn remove<K: LibraryKind>(app: &mut VectorcraftApp, id: &str) {
+    match app.run(K::REMOVE, json!({ "library": id })) {
+        Ok(_) => app.ui.library_panel = None,
+        Err(e) => app.status(e),
     }
 }
 
@@ -353,6 +420,9 @@ fn panel_menu<K: LibraryKind>(app: &mut VectorcraftApp, ui: &mut Ui, id: &str) {
     if menu_item(ui, tl!("Close Library"), true, false) {
         app.ui.library_panel = None;
     }
+    if menu_item(ui, tl!("Remove from Other Libraries"), other_library::<K>(app, id), false) {
+        remove::<K>(app, id);
+    }
 }
 
 /// The libraries menu (the panel's library button, the Swatches panel's): every library by
@@ -367,11 +437,14 @@ pub(crate) fn library_menu<K: LibraryKind>(app: &mut VectorcraftApp, ui: &mut Ui
 }
 
 /// Menu rows for `libs`: the top-level ones, then a submenu per [`LibraryRef::submenu`], with
-/// `current` checked. Returns the id of the one clicked.
+/// `current` checked and a library listed as missing named as [`missing_name`] names it. Returns
+/// the id of the one clicked.
 pub(crate) fn library_items(ui: &mut Ui, libs: &[LibraryRef], current: Option<&str>) -> Option<String> {
     let mut chosen = None;
     let mut item = |ui: &mut Ui, l: &LibraryRef| {
-        if widgets::menu_item_name(ui, library_name(&l.id, &l.name), true, current == Some(l.id.as_str())) {
+        let name = library_name(&l.id, &l.name);
+        let label = if l.missing { missing_name(name) } else { name.to_string() };
+        if widgets::menu_item_name(ui, &label, true, current == Some(l.id.as_str())) {
             chosen = Some(l.id.clone());
         }
     };
@@ -394,6 +467,108 @@ pub(crate) fn library_items(ui: &mut Ui, libs: &[LibraryRef], current: Option<&s
         });
     }
     chosen
+}
+
+/// The label that menus and panels show for a library listed as missing: `name` (missing).
+pub(crate) fn missing_name(name: &str) -> String {
+    crate::i18n::fmt(tl!("{name} (missing)"), &[("name", name)])
+}
+
+/// The libraries opened from files that a worker thread reads at launch ([`restore_files`]), until
+/// they are listed.
+pub(crate) struct Restore {
+    /// The swatch library files being read, which [`save_files`] saves if the app quits first.
+    swatches: Vec<String>,
+    /// The graphic style library files being read.
+    styles: Vec<String>,
+    /// The automation roots in force where [`restore_files`] was called.
+    scope: ScopeHandle,
+    read: Receiver<ReadFiles>,
+}
+
+/// The swatch and graphic style library files a worker read ([`read_files`]).
+type ReadFiles = (Vec<RememberedFile<SwatchLibrary>>, Vec<RememberedFile<StyleLibrary>>);
+
+/// Read the swatch library files `swatches` and the graphic style library files `styles` again,
+/// each inside the panic guard.
+fn read_files(swatches: &[String], styles: &[String]) -> ReadFiles {
+    (swatchlib::read_remembered(swatches), stylelib::read_remembered(styles))
+}
+
+/// List the swatch and graphic style libraries opened from files before the last quit again, from
+/// the paths in `UiState::swatch_library_files` and `style_library_files`, which this empties. A
+/// worker thread reads and parses the files, each inside the panic guard, and a later frame lists
+/// them ([`poll_restore`]); a file that can't be read, or whose reading panics, is listed as
+/// missing. Without a thread the files are read at once. The desktop host calls it at launch,
+/// after it read the saved UI state and set the user library folders.
+pub fn restore_files(app: &mut VectorcraftApp) {
+    let swatches = std::mem::take(&mut app.ui.swatch_library_files);
+    let styles = std::mem::take(&mut app.ui.style_library_files);
+    if swatches.is_empty() && styles.is_empty() {
+        return;
+    }
+    let (tx, read) = channel();
+    // The automation roots in force here are in force there.
+    let scope = ScopeHandle::capture();
+    let (s, g, worker_scope) = (swatches.clone(), styles.clone(), scope.clone());
+    let work = move || {
+        // The app may have quit meanwhile: nothing to hand the libraries to.
+        let _ = tx.send(worker_scope.run(|| read_files(&s, &g)));
+    };
+    let spawned =
+        if cfg!(target_arch = "wasm32") { None } else { std::thread::Builder::new().name("vectorcraft-libraries".into()).spawn(work.clone()).ok() };
+    if spawned.is_none() {
+        work();
+    }
+    app.library_restore = Some(Restore { swatches, styles, scope, read });
+}
+
+/// List the libraries [`restore_files`]'s worker read, once they arrive (each frame).
+pub(crate) fn poll_restore(app: &mut VectorcraftApp, ctx: &egui::Context) {
+    let Some(r) = &app.library_restore else { return };
+    match r.read.try_recv() {
+        Ok(read) => list_read(app, Some(read)),
+        Err(TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(50)),
+        Err(TryRecvError::Disconnected) => list_read(app, None),
+    }
+}
+
+/// Wait for [`restore_files`]'s worker and list the libraries it read. The control channel calls
+/// it before each request.
+pub(crate) fn wait_restore(app: &mut VectorcraftApp) {
+    let Some(r) = &app.library_restore else { return };
+    let read = r.read.recv().ok();
+    list_read(app, read);
+}
+
+/// List the library files a worker read; `None` when it stopped without an answer, and the files
+/// are read here.
+fn list_read(app: &mut VectorcraftApp, read: Option<ReadFiles>) {
+    let Some(r) = app.library_restore.take() else { return };
+    let (swatches, styles) = read.unwrap_or_else(|| r.scope.run(|| read_files(&r.swatches, &r.styles)));
+    swatchlib::restore(&mut app.session, swatches);
+    stylelib::restore(&mut app.session, styles);
+}
+
+/// Put the paths [`restore_files`] reads into `ui`, the UI state the desktop host saves when the
+/// app quits: the files of the swatch and graphic style libraries opened from files, missing ones
+/// and ones still being read included.
+pub fn save_files(app: &VectorcraftApp, ui: &mut crate::state::UiState) {
+    let reading = app.library_restore.as_ref();
+    ui.swatch_library_files = kept(reading.map(|r| r.swatches.as_slice()), app.session.swatch_libraries.remembered());
+    ui.style_library_files = kept(reading.map(|r| r.styles.as_slice()), app.session.style_libraries.remembered());
+}
+
+/// The files still being read (`reading`), then each file of a listed library that isn't
+/// among them.
+fn kept(reading: Option<&[String]>, listed: Vec<String>) -> Vec<String> {
+    let mut files = reading.map(<[String]>::to_vec).unwrap_or_default();
+    for file in listed {
+        if !files.contains(&file) {
+            files.push(file);
+        }
+    }
+    files
 }
 
 #[cfg(test)]
@@ -668,5 +843,113 @@ mod tests {
         let (_, lib) = SwatchLibraries::get(&app, &open.id).unwrap();
         assert_eq!((lib.len(), lib.groups.len()), (4, 1));
         assert_eq!(app.session.documents().len(), 1, "not opened as a document");
+    }
+
+    #[test]
+    fn libraries_opened_from_files_come_back_and_a_missing_one_stays_open_in_the_panel() {
+        use crate::panels::graphic_styles::GraphicStyleLibraries;
+        let dir = std::env::temp_dir().join(format!("vc-library-panel-restore-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let gpl = dir.join("Restart.gpl").to_string_lossy().to_string();
+        std::fs::write(&gpl, "GIMP Palette\nName: Restart\n255 0 0 Restart Red\n").unwrap();
+        let mut app = app();
+        let styles = app.run("graphicStyle.saveLibrary", json!({"name": "Looks"})).unwrap()["data"].as_str().unwrap().to_string();
+        let vcstyles = dir.join("Looks.vcstyles").to_string_lossy().to_string();
+        std::fs::write(&vcstyles, styles).unwrap();
+        app.run("window.graphicStyleLibrary.other", json!({ "path": vcstyles })).unwrap();
+        app.run("window.swatchLibrary.other", json!({ "path": gpl })).unwrap();
+        let id = format!("loaded/{gpl}");
+        app.run("ui.colorGuideLimit", json!({ "library": id })).unwrap();
+        // The desktop host saves this UI state when the app quits and reads it at the next launch.
+        let mut ui = app.ui.clone();
+        save_files(&app, &mut ui);
+        let saved: crate::state::UiState = serde_json::from_slice(&serde_json::to_vec(&ui).unwrap()).unwrap();
+        assert_eq!((saved.swatch_library_files.clone(), saved.style_library_files.clone()), (vec![gpl.clone()], vec![vcstyles.clone()]));
+        std::fs::remove_file(&gpl).unwrap();
+        std::fs::remove_file(&vcstyles).unwrap();
+        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        app.ui = saved.sanitized();
+        restore_files(&mut app);
+        assert!(app.ui.swatch_library_files.is_empty() && app.ui.style_library_files.is_empty(), "read once");
+        // A worker reads the files. Until they are listed, the panel stays open, and quitting
+        // saves the files again.
+        assert!(SwatchLibraries::list(&app).iter().all(|l| l.id != id), "not listed by restore_files");
+        let ctx = context();
+        frame(&mut app, &ctx, vec![], Modifiers::NONE, 0.0);
+        assert_eq!(app.ui.library_panel, Some(OpenLibrary { kind: "swatches".into(), id: id.clone() }));
+        let mut ui = app.ui.clone();
+        save_files(&app, &mut ui);
+        assert_eq!((ui.swatch_library_files, ui.style_library_files), (vec![gpl.clone()], vec![vcstyles.clone()]));
+        wait_restore(&mut app);
+        // The panel stays open on the missing library and shows its file.
+        frame(&mut app, &ctx, vec![], Modifiers::NONE, 0.25);
+        assert_eq!(app.ui.library_panel, Some(OpenLibrary { kind: "swatches".into(), id: id.clone() }));
+        let text = crate::tests_labels::painted_text(&mut app, |app, ui| show_window(app, ui.ctx()));
+        assert!(
+            text.contains("Restart\n") && text.contains(&format!("Missing: {gpl}\n")) && text.contains("Remove from Other Libraries\n"),
+            "{text}"
+        );
+        // The libraries menus list it as missing, and Color Guide names it.
+        let listed = SwatchLibraries::list(&app).into_iter().find(|l| l.id == id).unwrap();
+        assert!(listed.missing && listed.submenu == Some("Other Libraries"));
+        let row = [LibraryRef { submenu: None, ..listed }];
+        let menu = crate::tests_labels::painted_text(&mut app, |_, ui| {
+            library_items(ui, &row, None);
+        });
+        assert!(menu.contains("Restart (missing)\n"), "{menu}");
+        let shown = crate::tests_labels::painted_text(&mut app, crate::panels::color_guide::show);
+        assert!(shown.contains("Restart (missing)\n"), "{shown}");
+        // Limit to Library can't be set to it again: the error names the file.
+        let e = app.run("ui.colorGuideLimit", json!({ "library": id })).unwrap_err();
+        assert_eq!(e, format!("library `Restart` is missing: {gpl} can't be read"));
+        let r = app.run("window.swatchLibrary", json!({"library": "restart"})).unwrap();
+        assert_eq!((r["open"].as_str(), r["count"].as_u64(), r["missing"].as_bool()), (Some(id.as_str()), Some(0), Some(true)));
+        let style_id = format!("loaded/{vcstyles}");
+        assert_eq!(GraphicStyleLibraries::missing(&app, &style_id).map(|(info, path)| (info.name, path)), Some(("Looks".into(), vcstyles.clone())));
+        // Remove from Other Libraries takes it off the list and closes the panel.
+        assert!(other_library::<SwatchLibraries>(&app, &id) && !other_library::<SwatchLibraries>(&app, "pastels"));
+        remove::<SwatchLibraries>(&mut app, &id);
+        assert!(app.ui.library_panel.is_none());
+        assert!(SwatchLibraries::list(&app).iter().all(|l| l.id != id));
+        let mut ui = app.ui.clone();
+        save_files(&app, &mut ui);
+        assert!(ui.swatch_library_files.is_empty() && ui.style_library_files == [vcstyles]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The libraries opened from files are read off the UI thread at launch: the app's frames list
+    /// them once they are read, and a control request waits for them.
+    #[test]
+    fn libraries_opened_from_files_are_listed_by_a_later_frame() {
+        let dir = std::env::temp_dir().join(format!("vc-library-panel-later-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let gpl = dir.join("Later.gpl").to_string_lossy().to_string();
+        std::fs::write(&gpl, "GIMP Palette\nName: Later\n0 128 0 Later Green\n").unwrap();
+        let id = format!("loaded/{gpl}");
+        let listed = |app: &VectorcraftApp| SwatchLibraries::list(app).iter().any(|l| l.id == id && !l.missing);
+        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        app.ui.swatch_library_files = vec![gpl.clone()];
+        restore_files(&mut app);
+        let ctx = context();
+        let t0 = std::time::Instant::now();
+        while !listed(&app) && t0.elapsed().as_secs() < 30 {
+            ctx.run_ui(egui::RawInput::default(), |ui| app.logic(ui.ctx())).textures_delta.clear();
+            std::thread::yield_now();
+        }
+        assert!(listed(&app) && app.library_restore.is_none(), "listed by the app's frames");
+        // A control request sent before the library is listed gets the library in its reply.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut app = VectorcraftApp::new(Session::new(), Default::default()).with_control(rx);
+        app.ui.swatch_library_files = vec![gpl.clone()];
+        restore_files(&mut app);
+        let get = json!({"command": "swatch.library.get", "params": {"library": id}});
+        let (req, reply) = crate::control::ControlRequest::new("engine.execute", get);
+        tx.send(req).unwrap();
+        app.drain_control(&ctx);
+        let r = reply.try_recv().unwrap();
+        assert_eq!((r["result"]["name"].as_str(), r["result"]["swatches"].as_array().map(Vec::len)), (Some("Later"), Some(1)), "{r}");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

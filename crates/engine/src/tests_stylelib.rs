@@ -215,6 +215,46 @@ fn user_libraries_and_other_documents_styles() {
 }
 
 #[test]
+fn libraries_loaded_from_files_are_listed_again_and_a_missing_one_says_so() {
+    let dir = std::env::temp_dir().join(format!("vc-stylelib-restore-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = session();
+    let data = run(&mut s, "graphicStyle.saveLibrary", json!({"name": "Kit"}))["data"].as_str().unwrap().to_string();
+    let (kit, gone) = (dir.join("Kit.vcstyles").to_string_lossy().to_string(), dir.join("Gone.vcstyles").to_string_lossy().to_string());
+    std::fs::write(&kit, &data).unwrap();
+    std::fs::write(&gone, &data).unwrap();
+    run(&mut s, "graphicStyle.loadLibrary", json!({ "path": kit }));
+    run(&mut s, "graphicStyle.loadLibrary", json!({ "path": gone }));
+    let kept = s.style_libraries.remembered();
+    assert_eq!(kept, [kit.clone(), gone.clone()]);
+    std::fs::remove_file(&gone).unwrap();
+    // In a new session, restore lists both again: the one whose file is gone is listed as missing
+    // and named after the file.
+    let mut s = session();
+    cmd::stylelib::restore(&mut s, cmd::stylelib::read_remembered(&kept));
+    let list = run(&mut s, "graphicStyle.libraries", json!({}));
+    let loaded: Vec<(&str, u64, bool)> = list["libraries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|l| l["category"] == "loaded")
+        .map(|l| (l["name"].as_str().unwrap(), l["count"].as_u64().unwrap(), l["missing"] == true))
+        .collect();
+    assert_eq!(loaded, [("Kit", doc(&s).graphic_styles.len() as u64, false), ("Gone", 0, true)]);
+    let gone_id = format!("loaded/{gone}");
+    for (cmd, p) in [("graphicStyle.library", json!({ "library": gone_id })), ("graphicStyle.addFromLibrary", json!({"library": "gone"}))] {
+        let e = s.execute(cmd, &p).unwrap_err().to_string();
+        assert_eq!(e, format!("library `Gone` is missing: {gone} can't be read"), "{cmd}");
+    }
+    // Remove from Other Libraries takes it off the list.
+    assert_eq!(run(&mut s, "graphicStyle.removeLibrary", json!({ "library": gone_id }))["name"], "Gone");
+    assert_eq!(s.style_libraries.remembered(), [kit]);
+    assert!(s.execute("graphicStyle.removeLibrary", &json!({"library": "shadows-glows"})).is_err());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn every_builtin_style_paints_visibly_on_a_rectangle() {
     let mut s = session();
     let mut renderer = vectorcraft_render::Renderer::new();

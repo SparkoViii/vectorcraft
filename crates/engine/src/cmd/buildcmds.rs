@@ -682,8 +682,11 @@ fn trace_library(s: &Session, params: &mut tr::TraceParams) -> Result<Vec<([u8; 
         return Ok(vec![]);
     }
     let key = params.library.as_str();
-    let colors = super::swatchlib::library_colors(s, key)
-        .ok_or_else(|| bad(C, format!("no swatch library `{key}` (see swatch.library.list; \"document\": the document's swatches)")))?;
+    let colors = super::swatchlib::library_colors(s, key).ok_or_else(|| {
+        s.swatch_libraries
+            .missing_error(key)
+            .unwrap_or_else(|| bad(C, format!("no swatch library `{key}` (see swatch.library.list; \"document\": the document's swatches)")))
+    })?;
     if colors.is_empty() {
         return Err(bad(C, format!("`{key}` has no colours")));
     }

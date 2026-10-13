@@ -2304,6 +2304,7 @@
 	Remove blank lines between paragraphs	Rimuovi righe vuote tra i paragrafi
 	Remove Brush Stroke	Rimuovi traccia pennello
 	Remove Effect	Rimuovi effetto
+	Remove from Other Libraries	Rimuovi da Altre librerie
 	Remove Guide	Rimuovi guida
 	Remove Item	Rimuovi elemento
 	Remove Plug-in	Rimuovi plug-in
@@ -3282,6 +3283,7 @@
 	{kind} Gradient	Sfumatura {kind}
 	{kind} Style Options…	Opzioni stile {kind}…
 	{kind}, {model}	{kind}, {model}
+	{name} (missing)	{name} (mancante)
 	{name} (spot)	{name} (spot)
 	{pages} in all, {count} per copy	{pages} in totale, {count} per copia
 	{page} of {count}	{page} di {count}
@@ -3705,6 +3707,7 @@ axis	Both	Entrambi
 @msg	no interaction in progress	nessuna interazione in corso
 @msg	no key object	nessun oggetto chiave
 @msg	no library `{key}` (see {list})	nessuna libreria `{key}` (vedi {list})
+@msg	library `{name}` is missing: {path} can't be read	manca la libreria `{name}`: impossibile leggere {path}
 @msg	no native format	nessun formato nativo
 @msg	no pages	nessuna pagina
 @msg	no pattern `{name}`	nessun motivo `{name}`

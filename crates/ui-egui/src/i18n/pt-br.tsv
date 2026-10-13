@@ -1924,6 +1924,7 @@
 	Remove Asset	Remover Ativo
 	Remove Brush Stroke	Remover Traço de Pincel
 	Remove Effect	Remover Efeito
+	Remove from Other Libraries	Remover de Outras Bibliotecas
 	Remove Guide	Remover Guia
 	Remove Item	Remover Item
 	Remove Plug-in	Remover Plug-in
@@ -2704,6 +2705,7 @@
 	{kind} Gradient	Gradiente de {kind}
 	{kind} Style Options…	Opções de Estilo de {kind}…
 	{kind}, {model}	{kind}, {model}
+	{name} (missing)	{name} (ausente)
 	{name} (spot)	{name} (spot)
 	{pages} in all, {count} per copy	{pages} no total, {count} por cópia
 	{page} of {count}	{page} de {count}

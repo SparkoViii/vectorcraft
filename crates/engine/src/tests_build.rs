@@ -857,6 +857,12 @@ fn image_trace_palettes_and_swatch_libraries() {
     let mut bad = |p: Value| s.execute("imageTrace.make", &json!({"preset": "6 Colors", "params": p})).is_err();
     assert!(bad(json!({"palette": "documentLibrary", "library": "No Such Library"})));
     assert!(bad(json!({"palette": "rainbow"})));
+    // A library listed as missing (its file couldn't be read at launch): the error names the file.
+    let gone = std::env::temp_dir().join(format!("vc-trace-missing-{}.gpl", std::process::id())).to_string_lossy().to_string();
+    crate::cmd::swatchlib::restore(&mut s, crate::cmd::swatchlib::read_remembered(std::slice::from_ref(&gone)));
+    let p = json!({"preset": "6 Colors", "params": {"palette": "documentLibrary", "library": format!("loaded/{gone}")}});
+    let e = s.execute("imageTrace.make", &p).unwrap_err().to_string();
+    assert!(e.contains("is missing") && e.contains(&gone), "{e}");
 }
 
 #[test]

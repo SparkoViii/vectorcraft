@@ -3,7 +3,9 @@
 //! [`vectorcraft_color::libraries`]; User Defined ones are the library files in the user library
 //! folder ([`Libraries`]), and Other Library… loads more from files. `swatch.library.add` copies
 //! swatches into the document; `swatch.library.save` writes the document's ([`palette_io`]).
-//! `swatch.library.copyToUser` copies a loaded library into the user library folder.
+//! `swatch.library.copyToUser` copies a loaded library into the user library folder. The desktop
+//! app lists the libraries loaded from files again when it starts ([`restore`]), as missing when a
+//! file can't be read, and `swatch.library.remove` takes a loaded library off the list.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -27,7 +29,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Swatch Libraries",
             [],
             None,
-            "{} → {libraries: [{id, name, category: \"builtIn\"|\"gradients\"|\"user\" (User Defined: the library files in the user library folder, rescanned now)|\"loaded\" (swatch.library.load), count, path?}], userFolder} every library the library panel opens, in menu order",
+            "{} → {libraries: [{id, name, category: \"builtIn\"|\"gradients\"|\"user\" (User Defined: the library files in the user library folder, rescanned now)|\"loaded\" (swatch.library.load), count, path?, missing?: true (a loaded library whose file couldn't be read when the desktop app started: named after the file without its extension, count 0)}], userFolder} every library the library panel opens, in menu order",
             always,
             list
         ),
@@ -72,7 +74,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Other Library…",
             ["Window", "Swatch Libraries"],
             None,
-            "{path? | data?: file text | dataBase64?, name?: file name (default: the path's)} load a .vcswatches, .gpl, .ase (swatch exchange) or .acb (color book, read only) library, or the swatches of any document VectorCraft opens (see document.formats), for the library panel (Window → Swatch Libraries lists it until the app quits; a file of the user library folder, or a file with the same extension and bytes as one there, opens as that User Defined library) → {library: id, name, count}",
+            "{path? | data?: file text | dataBase64?, name?: file name (default: the path's)} load a .vcswatches, .gpl, .ase (swatch exchange) or .acb (color book, read only) library, or the swatches of any document VectorCraft opens (see document.formats), for the library panel: the Swatch Libraries menus list it under Other Libraries (a file of the user library folder, or a file with the same extension and bytes as one there, opens as that User Defined library). The desktop app saves the paths of the libraries loaded from files with its preferences when it quits and lists them again when it starts, as missing when a file can't be read then, until swatch.library.remove takes one off; a library loaded from data is listed until the app quits → {library: id, name, count}",
             always,
             load
         ),
@@ -81,16 +83,26 @@ pub fn specs() -> Vec<CommandSpec> {
             "Copy to User Defined",
             ["Window", "Swatch Libraries"],
             None,
-            "{library: id or name of a loaded library (category \"loaded\", swatch.library.load)} copy it into the user library folder of the desktop app, whose libraries VectorCraft lists as User Defined every time it starts (a loaded library is listed until the app quits): a library file as it is, the swatches of a document or a library loaded from data as a .vcswatches file. A name the folder already has gets a number (\"Brand 2.ase\") and no file is replaced; when the folder already holds the same file, that file is used. The library is then listed as User Defined only, and until the app quits commands given its loaded id use the copy; a User Defined library comes back as it is → {library: its User Defined id, name, count, path, copied: false when nothing was written}",
+            "{library: id or name of a loaded library (category \"loaded\", swatch.library.load)} copy it into the user library folder of the desktop app, whose libraries VectorCraft lists as User Defined every time it starts (a library loaded from a file is read again from that file at each start, and listed as missing when the file can't be read): a library file as it is, the swatches of a document or a library loaded from data as a .vcswatches file. A name the folder already has gets a number (\"Brand 2.ase\") and no file is replaced; when the folder already holds the same file, that file is used. The library is then listed as User Defined only, and until the app quits commands given its loaded id use the copy; a User Defined library comes back as it is → {library: its User Defined id, name, count, path, copied: false when nothing was written}",
             has_user_folder,
             copy_to_user
+        ),
+        cmd!(
+            "swatch.library.remove",
+            "Remove from Other Libraries",
+            ["Window", "Swatch Libraries"],
+            None,
+            "{library: id or name of a loaded library (category \"loaded\", swatch.library.load), missing or not} take it off the Swatch Libraries menus; the desktop app no longer lists it when it starts. Its file is left as it is → {library: id, name}",
+            always,
+            remove
         ),
     ]
 }
 
 /// The libraries beyond the built-in ones: User Defined (the library files in the user library
-/// folder, as last scanned) and loaded ones (`swatch.library.load`). Graphic style libraries use
-/// the same with [`vectorcraft_doc::StyleLibrary`] ([`super::stylelib`]).
+/// folder, as last scanned) and loaded ones (`swatch.library.load`, and [`Libraries::restore`] at
+/// launch, which lists a file that can't be read as missing). Graphic style libraries use the same
+/// with [`vectorcraft_doc::StyleLibrary`] ([`super::stylelib`]).
 #[derive(Clone, Debug, Default)]
 pub struct Libraries<L = SwatchLibrary> {
     /// The user library folder. The desktop app sets it; without one (the web, headless sessions)
@@ -106,7 +118,16 @@ pub struct Libraries<L = SwatchLibrary> {
 struct Extra<L> {
     info: LibraryInfo,
     path: Option<String>,
-    lib: Arc<L>,
+    /// `None` for a library listed as missing ([`Libraries::restore`]).
+    lib: Option<Arc<L>>,
+}
+
+/// A file of a [`Libraries::remembered`] list as [`Libraries::read_remembered`] read it, for
+/// [`Libraries::restore`].
+pub struct RememberedFile<L> {
+    path: String,
+    /// `None` when the file couldn't be read or parsed, or reading it panicked.
+    lib: Option<L>,
 }
 
 /// A kind of library that lives in files ([`Libraries`]).
@@ -152,15 +173,18 @@ impl<L: LibraryFile> Libraries<L> {
     }
 
     /// Re-read the library files of the user library folder (unreadable ones are skipped). The
-    /// folder is the app's own: automation roots don't apply to it ([`crate::file_access`]).
+    /// folder is the app's own: automation roots don't apply to it ([`crate::file_access`]). Each
+    /// file is read inside [`crate::guard::catch_panic`], and a file whose reading panics is
+    /// skipped too.
     pub fn rescan(&mut self) {
         self.extra.retain(|e| e.info.category != "user");
         let Some(dir) = self.user_dir.clone() else { return };
         for path in library_files(&dir, L::EXTS) {
             let file = file_name(&path);
-            let Some(lib) = crate::file_access::unconfined(|| read_file(&path)).ok().and_then(|b| L::read(&b, stem(&file)).ok()) else { continue };
-            let info = LibraryInfo { id: format!("user/{file}"), name: lib.name().to_string(), category: "user" };
-            self.extra.push(Extra { info, path: Some(path), lib: Arc::new(lib) });
+            let read = || crate::file_access::unconfined(|| read_file(&path)).ok().and_then(|b| L::read(&b, stem(&file)).ok());
+            let Some(lib) = crate::guard::catch_panic(read).ok().flatten() else { continue };
+            let info = LibraryInfo { id: format!("user/{file}"), name: lib.name().to_string(), category: "user", missing: false };
+            self.extra.push(Extra { info, path: Some(path), lib: Some(Arc::new(lib)) });
         }
     }
 
@@ -169,10 +193,11 @@ impl<L: LibraryFile> Libraries<L> {
         self.extra.iter().map(|e| &e.info)
     }
 
-    /// The User Defined or loaded library `id`. The id of a loaded library copied into the user
-    /// library folder finds the User Defined copy.
+    /// The User Defined or loaded library `id` with its contents; `None` for one listed as missing
+    /// ([`Libraries::missing`]). The id of a loaded library copied into the user library folder
+    /// finds the User Defined copy.
     pub fn get(&self, id: &str) -> Option<(LibraryInfo, Arc<L>)> {
-        let find = |id: &str| self.extra.iter().find(|e| e.info.id == id).map(|e| (e.info.clone(), e.lib.clone()));
+        let find = |id: &str| self.extra.iter().find(|e| e.info.id == id).and_then(|e| Some((e.info.clone(), e.lib.clone()?)));
         find(id).or_else(|| self.copied.iter().find(|(loaded, _)| loaded == id).and_then(|(_, user)| find(user)))
     }
 
@@ -223,11 +248,13 @@ impl<L: LibraryFile> Libraries<L> {
     }
 
     /// Load a library from `p` (`path`, `data` or `dataBase64`; `name`: the file's name) as the
-    /// load commands do, `parse(bytes, file name)` reading it. A file of the user library folder,
-    /// or a file with the same extension and bytes as one there, is that User Defined library;
-    /// others are listed as loaded until the app quits.
+    /// load commands do, `parse(bytes, file name)` reading it. A relative `path` is made absolute
+    /// against the working directory. A file of the user library folder, or a file with the same
+    /// extension and bytes as one there, is that User Defined library; others are listed as
+    /// loaded, and [`Libraries::remembered`] gives the path of one read from a file.
     pub(crate) fn load(&mut self, p: &Value, cmd: &str, parse: impl FnOnce(&[u8], &str) -> Result<L>) -> Result<(LibraryInfo, Arc<L>)> {
-        let path = str_param(p, "path");
+        let absolute = str_param(p, "path").map(super::fileio::absolute_path);
+        let path = absolute.as_deref();
         let bytes = match (path, str_param(p, "data"), str_param(p, "dataBase64")) {
             (Some(path), ..) => read_file(path)?,
             (None, Some(text), _) => text.as_bytes().to_vec(),
@@ -239,13 +266,15 @@ impl<L: LibraryFile> Libraries<L> {
         self.rescan();
         let user =
             |p: &str| self.extra.iter().find(|e| e.info.category == "user" && e.path.as_deref() == Some(p)).or_else(|| self.user_file(p, &bytes));
-        if let Some(e) = path.and_then(user) {
-            return Ok((e.info.clone(), e.lib.clone()));
+        if let Some(e) = path.and_then(user)
+            && let Some(lib) = &e.lib
+        {
+            return Ok((e.info.clone(), lib.clone()));
         }
-        let info = LibraryInfo { id: format!("loaded/{}", path.unwrap_or(&file)), name: lib.name().to_string(), category: "loaded" };
+        let info = LibraryInfo { id: format!("loaded/{}", path.unwrap_or(&file)), name: lib.name().to_string(), category: "loaded", missing: false };
         let lib = Arc::new(lib);
         self.extra.retain(|x| x.info.id != info.id);
-        self.extra.push(Extra { info: info.clone(), path: path.map(str::to_string), lib: lib.clone() });
+        self.extra.push(Extra { info: info.clone(), path: path.map(str::to_string), lib: Some(lib.clone()) });
         Ok((info, lib))
     }
 
@@ -269,7 +298,7 @@ impl<L: LibraryFile> Libraries<L> {
             .extra
             .iter()
             .find(|e| e.info.id == id && e.info.category == "loaded")
-            .map(|e| (e.path.clone(), e.lib.clone()))
+            .and_then(|e| Some((e.path.clone(), e.lib.clone()?)))
             .ok_or_else(|| bad(cmd, format!("`{id}` isn't a loaded library")))?;
         let (file, bytes) = match source.filter(|p| L::EXTS.contains(&extension(p).as_str())) {
             Some(p) => (file_name(&p), read_file(&p)?),
@@ -299,6 +328,67 @@ impl<L: LibraryFile> Libraries<L> {
         self.copied.retain(|(loaded, _)| loaded != id);
         self.copied.push((id.to_string(), info.id.clone()));
         Ok((info, lib, written.is_some()))
+    }
+
+    /// The files of the loaded libraries read from a path, missing ones included, in menu order:
+    /// what the desktop app saves when it quits, for [`Libraries::restore`] at the next launch. A
+    /// library loaded from data has no file to read again.
+    pub fn remembered(&self) -> Vec<String> {
+        self.extra.iter().filter(|e| e.info.category == "loaded").filter_map(|e| e.path.clone()).collect()
+    }
+
+    /// Read the library files `paths` (a [`Libraries::remembered`] list) again, in that order,
+    /// `parse` reading each file's bytes and name as the load command reads them. Each file is read
+    /// and parsed inside [`crate::guard::catch_panic`]: a file that can't be read or parsed, or
+    /// whose reading panics, comes back without a library. Empty paths are skipped. The desktop app
+    /// runs it on a worker thread at launch.
+    pub(crate) fn read_remembered(paths: &[String], parse: impl Fn(&[u8], &str) -> Result<L>) -> Vec<RememberedFile<L>> {
+        let read = |path: &String| {
+            let file = file_name(path);
+            let lib = crate::guard::catch_panic(|| read_file(path).and_then(|bytes| parse(&bytes, &file)).ok()).ok().flatten();
+            RememberedFile { path: path.clone(), lib }
+        };
+        paths.iter().filter(|p| !p.is_empty()).map(read).collect()
+    }
+
+    /// List the files [`Libraries::read_remembered`] read as loaded libraries again, in that order.
+    /// A file without a library is listed as missing, named after the file without its extension,
+    /// until [`Libraries::remove`] takes it off or loading the file again replaces it. Paths
+    /// already listed are skipped.
+    pub(crate) fn restore(&mut self, files: Vec<RememberedFile<L>>) {
+        for RememberedFile { path, lib } in files {
+            let id = format!("loaded/{path}");
+            if self.extra.iter().any(|e| e.info.id == id) {
+                continue;
+            }
+            let lib = lib.map(Arc::new);
+            let name = lib.as_ref().map_or_else(|| stem(&file_name(&path)).to_string(), |l| l.name().to_string());
+            let info = LibraryInfo { id, name, category: "loaded", missing: lib.is_none() };
+            self.extra.push(Extra { info, path: Some(path), lib });
+        }
+    }
+
+    /// The library listed as missing that `key` names (its id, else its name in any case), with
+    /// the file that can't be read.
+    pub fn missing(&self, key: &str) -> Option<(&LibraryInfo, &str)> {
+        let missing = || self.extra.iter().filter(|e| e.lib.is_none());
+        let e = missing().find(|e| e.info.id == key).or_else(|| missing().find(|e| e.info.name.eq_ignore_ascii_case(key)))?;
+        Some((&e.info, e.path.as_deref().unwrap_or_default()))
+    }
+
+    /// The error for a command given `key` when it names a library listed as missing.
+    pub fn missing_error(&self, key: &str) -> Option<EngineError> {
+        let (info, path) = self.missing(key)?;
+        let name = &info.name;
+        Some(EngineError::Other(format!("library `{name}` is missing: {path} can't be read")))
+    }
+
+    /// Take the loaded library that `key` names (its id, else its name in any case), missing or
+    /// not, off the list → its info; `None` when no loaded library has that id or name.
+    pub(crate) fn remove(&mut self, key: &str) -> Option<LibraryInfo> {
+        let loaded = || self.extra.iter().enumerate().filter(|(_, e)| e.info.category == "loaded");
+        let (i, _) = loaded().find(|(_, e)| e.info.id == key).or_else(|| loaded().find(|(_, e)| e.info.name.eq_ignore_ascii_case(key)))?;
+        Some(self.extra.remove(i).info)
     }
 }
 
@@ -344,6 +434,10 @@ pub struct LibraryInfo {
     pub name: String,
     /// "builtIn", "gradients", "user" or "loaded".
     pub category: &'static str,
+    /// A loaded library whose file couldn't be read when the desktop app started
+    /// ([`Libraries::restore`]): it has no contents, and it is named after the file without its
+    /// extension.
+    pub missing: bool,
 }
 
 /// The built-in libraries with their categories.
@@ -352,7 +446,7 @@ fn builtins() -> impl Iterator<Item = (&'static str, &'static BuiltinLibrary)> {
 }
 
 fn builtin_info((category, b): (&'static str, &BuiltinLibrary)) -> LibraryInfo {
-    LibraryInfo { id: b.id.into(), name: b.name.into(), category }
+    LibraryInfo { id: b.id.into(), name: b.name.into(), category, missing: false }
 }
 
 /// Every library, in menu order: built-in, gradients, User Defined, loaded.
@@ -360,7 +454,8 @@ pub fn libraries(s: &Session) -> Vec<LibraryInfo> {
     builtins().map(builtin_info).chain(s.swatch_libraries.infos().cloned()).collect()
 }
 
-/// Library `key` (an id, or a name in any case) with its info.
+/// Library `key` (an id, or a name in any case) with its info; `None` for a library listed as
+/// missing ([`Libraries::missing`]).
 pub fn library(s: &Session, key: &str) -> Option<(LibraryInfo, Arc<SwatchLibrary>)> {
     if let Some(found) = s.swatch_libraries.get(key) {
         return Some(found);
@@ -368,7 +463,7 @@ pub fn library(s: &Session, key: &str) -> Option<(LibraryInfo, Arc<SwatchLibrary
     if let Some(b) = builtins().find(|(_, b)| b.id == key) {
         return Some((builtin_info(b), builtin_library(key)?));
     }
-    let id = libraries(s).into_iter().find(|l| l.name.eq_ignore_ascii_case(key))?.id;
+    let id = libraries(s).into_iter().find(|l| !l.missing && l.name.eq_ignore_ascii_case(key))?.id;
     library(s, &id)
 }
 
@@ -377,14 +472,14 @@ pub const DOCUMENT_SWATCHES: &str = "document";
 
 /// The colours Limit to Library snaps to: the solid colours of library `key` (an id or name) or, for
 /// [`DOCUMENT_SWATCHES`], of the active document's swatches and colour groups. `None` when there is
-/// no such library (or document).
+/// no such library (or document), or the library is listed as missing.
 pub fn limit_palette(s: &Session, key: &str) -> Option<Palette> {
     Some(Palette::new(library_colors(s, key)?))
 }
 
 /// The solid colours of library `key` (an id or name) or, for [`DOCUMENT_SWATCHES`], of the
 /// active document's swatches and colour groups. `None` when there is no such library (or
-/// document).
+/// document), or the library is listed as missing.
 pub fn library_colors(s: &Session, key: &str) -> Option<Vec<Color>> {
     let colors = |sw: &Swatch| sw.paint.color();
     if key == DOCUMENT_SWATCHES {
@@ -396,8 +491,11 @@ pub fn library_colors(s: &Session, key: &str) -> Option<Vec<Color>> {
 /// The `limitTo` parameter's palette ([`limit_palette`]); `None` without one (or for "").
 pub(crate) fn limit_param(s: &Session, p: &Value, cmd: &str) -> Result<Option<Palette>> {
     let Some(key) = str_param(p, "limitTo").filter(|k| !k.is_empty()) else { return Ok(None) };
-    let palette = limit_palette(s, key)
-        .ok_or_else(|| bad(cmd, format!("no swatch library `{key}` (see swatch.library.list; \"{DOCUMENT_SWATCHES}\": the document's swatches)")))?;
+    let palette = limit_palette(s, key).ok_or_else(|| {
+        s.swatch_libraries.missing_error(key).unwrap_or_else(|| {
+            bad(cmd, format!("no swatch library `{key}` (see swatch.library.list; \"{DOCUMENT_SWATCHES}\": the document's swatches)"))
+        })
+    })?;
     if palette.is_empty() {
         return Err(bad(cmd, format!("`{key}` has no colours")));
     }
@@ -406,7 +504,9 @@ pub(crate) fn limit_param(s: &Session, p: &Value, cmd: &str) -> Result<Option<Pa
 
 fn library_param(s: &Session, p: &Value, cmd: &str) -> Result<(LibraryInfo, Arc<SwatchLibrary>)> {
     let key = str_param(p, "library").ok_or_else(|| bad(cmd, "missing `library` (see swatch.library.list)"))?;
-    library(s, key).ok_or_else(|| bad(cmd, format!("no swatch library `{key}` (see swatch.library.list)")))
+    library(s, key).ok_or_else(|| {
+        s.swatch_libraries.missing_error(key).unwrap_or_else(|| bad(cmd, format!("no swatch library `{key}` (see swatch.library.list)")))
+    })
 }
 
 fn list(s: &mut Session, _: &Value) -> Result<Value> {
@@ -415,7 +515,11 @@ fn list(s: &mut Session, _: &Value) -> Result<Value> {
         .into_iter()
         .map(|l| {
             let count = library(s, &l.id).map_or(0, |(_, lib)| lib.len());
-            json!({"id": l.id, "name": l.name, "category": l.category, "count": count, "path": s.swatch_libraries.path(&l.id)})
+            let mut v = json!({"id": l.id, "name": l.name, "category": l.category, "count": count, "path": s.swatch_libraries.path(&l.id)});
+            if l.missing {
+                v["missing"] = json!(true);
+            }
+            v
         })
         .collect();
     Ok(json!({ "libraries": libs, "userFolder": s.swatch_libraries.user_dir() }))
@@ -459,21 +563,47 @@ fn save(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(out)
 }
 
-fn load(s: &mut Session, p: &Value) -> Result<Value> {
+/// Read `bytes`, the contents of the file named `file`, as `swatch.library.load` reads them: a
+/// library file, or a document whose swatches become the library.
+fn parse(bytes: &[u8], file: &str) -> Result<SwatchLibrary> {
     const C: &str = "swatch.library.load";
-    let (info, lib) = s.swatch_libraries.load(p, C, |bytes, file| {
-        // A library file, or a document whose swatches become the library.
-        if palette_io::sniff_bytes(bytes) {
-            palette_io::read_bytes(bytes, stem(file)).map_err(|e| bad(C, e))
-        } else {
-            let loaded = super::fileio::load(file, bytes).map_err(|e| bad(C, e.to_string()))?;
-            if loaded.preview_only {
-                return Err(bad(C, "only this Affinity file's embedded preview could be read; use File › Open to see it with its warning"));
-            }
-            document_library(&loaded.doc, &[], stem(file).to_string(), C)
+    if palette_io::sniff_bytes(bytes) {
+        palette_io::read_bytes(bytes, stem(file)).map_err(|e| bad(C, e))
+    } else {
+        let loaded = super::fileio::load(file, bytes).map_err(|e| bad(C, e.to_string()))?;
+        if loaded.preview_only {
+            return Err(bad(C, "only this Affinity file's embedded preview could be read; use File › Open to see it with its warning"));
         }
-    })?;
+        document_library(&loaded.doc, &[], stem(file).to_string(), C)
+    }
+}
+
+fn load(s: &mut Session, p: &Value) -> Result<Value> {
+    let (info, lib) = s.swatch_libraries.load(p, "swatch.library.load", parse)?;
     Ok(json!({"library": info.id, "name": info.name, "count": lib.len()}))
+}
+
+/// Read the swatch library files `paths` again as `swatch.library.load` reads them, each inside
+/// the panic guard: the paths [`Libraries::remembered`] gave when the desktop app last quit, for
+/// [`restore`]. It takes no session and can run on any thread.
+pub fn read_remembered(paths: &[String]) -> Vec<RememberedFile<SwatchLibrary>> {
+    Libraries::read_remembered(paths, parse)
+}
+
+/// List the swatch library files [`read_remembered`] read as loaded libraries again. A file that
+/// couldn't be read is listed as missing.
+pub fn restore(s: &mut Session, files: Vec<RememberedFile<SwatchLibrary>>) {
+    s.swatch_libraries.restore(files);
+}
+
+fn remove(s: &mut Session, p: &Value) -> Result<Value> {
+    const C: &str = "swatch.library.remove";
+    let key = str_param(p, "library").ok_or_else(|| bad(C, "missing `library` (see swatch.library.list)"))?;
+    let info = s
+        .swatch_libraries
+        .remove(key)
+        .ok_or_else(|| bad(C, format!("no library `{key}` under Other Libraries (see swatch.library.list, category \"loaded\")")))?;
+    Ok(json!({"library": info.id, "name": info.name}))
 }
 
 fn get(s: &mut Session, p: &Value) -> Result<Value> {

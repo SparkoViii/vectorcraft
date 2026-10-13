@@ -1128,6 +1128,10 @@ spot or process swatches and keeps their color groups. A color book (such as a P
 CMYK or Lab colors named with the book's prefix and suffix ("PANTONE 185 C"), as spot colors unless the book marks
 them as process colors; `.acb` files are read, never written. A file in the user library folder, or a file with the
 same extension and bytes as one there, loads as that User Defined library (category `user`).
+The desktop app saves the paths of the libraries loaded from files with its preferences when it quits and lists them
+again when it starts. A library whose file can't be read then is listed with `missing: true`, `count: 0` and its
+`path`, and a command that needs its swatches fails with an error that names the file.
+`swatch.library.remove {library}` takes a loaded library off the list, missing or not, and leaves its file as it is.
 `swatch.library.copyToUser {library}` copies a loaded library into the user library folder of the desktop
 app (a library file as it is; a document's swatches or a library loaded from `data` or `dataBase64`
 as `.vcswatches`) under a name no file there has, and lists it as User Defined from then on; until the app
@@ -1156,7 +1160,9 @@ the styles unlinked from swatches, with their opacity, blend mode, isolate and k
 with); without `path` it returns `{data}`, and `user: true` saves into the user library folder of the desktop app
 (category `user`, User Defined). `graphicStyle.loadLibrary {path? | data? | dataBase64?, name?}` loads a `.vcstyles`
 file, or another document's graphic styles, as a library to add from; a file in the user library folder, or a file
-with the same extension and bytes as one there, loads as that User Defined library.
+with the same extension and bytes as one there, loads as that User Defined library. As with swatch libraries, the
+desktop app lists the libraries loaded from files again when it starts (`missing: true` when a file can't be read),
+and `graphicStyle.removeLibrary {library}` takes a loaded library off the list.
 
 ## Libraries
 

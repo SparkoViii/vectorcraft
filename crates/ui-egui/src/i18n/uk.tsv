@@ -2296,6 +2296,7 @@
 	Remove blank lines between paragraphs	Прибрати порожні рядки між абзацами
 	Remove Brush Stroke	Забрати мазок пензлі
 	Remove Effect	Прибрати ефект
+	Remove from Other Libraries	Прибрати з «Інші бібліотеки»
 	Remove Guide	Прибрати напрямну
 	Remove Item	Прибрати елемент
 	Remove Plug-in	Забрати модуль
@@ -3275,6 +3276,7 @@ effect	Points	Точки
 	{kind} Gradient	градієнт {kind}
 	{kind} Style Options…	параметри стилю {kind}…
 	{kind}, {model}	{kind}, {model}
+	{name} (missing)	{name} (відсутня)
 	{name} (spot)	{name} (плашковий)
 	{pages} in all, {count} per copy	усього {pages}, за {count} на копію
 	{page} of {count}	{page} з {count}
@@ -3689,6 +3691,7 @@ axis	Both	Обидві
 @msg	no interaction in progress	немає взаємодії у процесі
 @msg	no key object	немає ключового об’єкта
 @msg	no library `{key}` (see {list})	немає бібліотеки `{key}` (див. {list})
+@msg	library `{name}` is missing: {path} can't be read	бібліотека `{name}` відсутня: неможливо прочитати {path}
 @msg	no native format	немає власного формату
 @msg	no pages	немає сторінок
 @msg	no pattern `{name}`	немає візерунка `{name}`

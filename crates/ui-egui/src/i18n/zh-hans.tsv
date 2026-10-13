@@ -2226,6 +2226,7 @@
 	Remove blank lines between paragraphs	移除段落之间的空行
 	Remove Brush Stroke	移除画笔描边
 	Remove Effect	移除效果
+	Remove from Other Libraries	从其他库中移除
 	Remove Guide	删除参考线
 	Remove Item	移除项目
 	Remove Plug-in	移除插件
@@ -3175,6 +3176,7 @@
 	{kind} Gradient	{kind}渐变
 	{kind} Style Options…	{kind}样式选项…
 	{kind}, {model}	{kind}，{model}
+	{name} (missing)	{name} (缺失)
 	{name} (spot)	{name} (专色)
 	{pages} in all, {count} per copy	共 {pages}，每份 {count}
 	{page} of {count}	第 {page} 页，共 {count} 页

@@ -3,7 +3,9 @@
 //! generated in [`vectorcraft_doc::style_libs`]; User Defined ones are the `.vcstyles` files in the
 //! user library folder ([`Libraries`]), and Other Library… loads more from files.
 //! `graphicStyle.addFromLibrary` copies styles into the document; `graphicStyle.saveLibrary`
-//! writes the document's.
+//! writes the document's. The desktop app lists the libraries loaded from files again when it
+//! starts ([`restore`]), as missing when a file can't be read, and `graphicStyle.removeLibrary`
+//! takes a loaded library off the list.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -15,7 +17,7 @@ use vectorcraft_doc::{Document, GraphicStyle, PatternDef, StyleLibrary};
 
 use super::menucmds::squash;
 use super::swatch::str_list;
-use super::swatchlib::{FileData, LibraryFile, LibraryInfo, stem};
+use super::swatchlib::{FileData, LibraryFile, LibraryInfo, RememberedFile, stem};
 use super::*;
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -25,7 +27,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Graphic Style Libraries",
             [],
             None,
-            "{} → {libraries: [{id, name, category: \"builtIn\"|\"user\" (User Defined: the .vcstyles files in the user library folder, rescanned now)|\"loaded\" (graphicStyle.loadLibrary), count, path?}], userFolder} every graphic style library the library panel opens, in menu order",
+            "{} → {libraries: [{id, name, category: \"builtIn\"|\"user\" (User Defined: the .vcstyles files in the user library folder, rescanned now)|\"loaded\" (graphicStyle.loadLibrary), count, path?, missing?: true (a loaded library whose file couldn't be read when the desktop app started: named after the file without its extension, count 0)}], userFolder} every graphic style library the library panel opens, in menu order",
             always,
             list
         ),
@@ -61,9 +63,18 @@ pub fn specs() -> Vec<CommandSpec> {
             "Other Library…",
             ["Window", "Graphic Style Libraries"],
             None,
-            "{path? | data?: file text | dataBase64?, name?: file name (default: the path's)} load a .vcstyles library, or the graphic styles of any document VectorCraft opens (see document.formats), for the library panel (Window → Graphic Style Libraries lists it until the app quits; a file of the user library folder, or a file with the same extension and bytes as one there, opens as that User Defined library) → {library: id, name, count}",
+            "{path? | data?: file text | dataBase64?, name?: file name (default: the path's)} load a .vcstyles library, or the graphic styles of any document VectorCraft opens (see document.formats), for the library panel: the Graphic Style Libraries menus list it under Other Libraries (a file of the user library folder, or a file with the same extension and bytes as one there, opens as that User Defined library). The desktop app saves the paths of the libraries loaded from files with its preferences when it quits and lists them again when it starts, as missing when a file can't be read then, until graphicStyle.removeLibrary takes one off; a library loaded from data is listed until the app quits → {library: id, name, count}",
             always,
             load
+        ),
+        cmd!(
+            "graphicStyle.removeLibrary",
+            "Remove from Other Libraries",
+            ["Window", "Graphic Style Libraries"],
+            None,
+            "{library: id or name of a loaded library (category \"loaded\", graphicStyle.loadLibrary), missing or not} take it off the Graphic Style Libraries menus; the desktop app no longer lists it when it starts. Its file is left as it is → {library: id, name}",
+            always,
+            remove
         ),
     ]
 }
@@ -82,7 +93,7 @@ impl LibraryFile for StyleLibrary {
 pub type Libraries = super::swatchlib::Libraries<StyleLibrary>;
 
 fn builtin_info(b: &style_libs::BuiltinStyleLibrary) -> LibraryInfo {
-    LibraryInfo { id: b.id.into(), name: b.name.into(), category: "builtIn" }
+    LibraryInfo { id: b.id.into(), name: b.name.into(), category: "builtIn", missing: false }
 }
 
 /// Every graphic style library, in menu order: built-in, User Defined, loaded.
@@ -90,7 +101,8 @@ pub fn libraries(s: &Session) -> Vec<LibraryInfo> {
     STYLE_LIBRARIES.iter().map(builtin_info).chain(s.style_libraries.infos().cloned()).collect()
 }
 
-/// Library `key` (an id, or a name in any case) with its info.
+/// Library `key` (an id, or a name in any case) with its info; `None` for a library listed as
+/// missing ([`Libraries::missing`]).
 pub fn library(s: &Session, key: &str) -> Option<(LibraryInfo, Arc<StyleLibrary>)> {
     if let Some(found) = s.style_libraries.get(key) {
         return Some(found);
@@ -98,13 +110,15 @@ pub fn library(s: &Session, key: &str) -> Option<(LibraryInfo, Arc<StyleLibrary>
     if let Some(b) = STYLE_LIBRARIES.iter().find(|b| b.id == key) {
         return Some((builtin_info(b), builtin_style_library(key)?));
     }
-    let id = libraries(s).into_iter().find(|l| l.name.eq_ignore_ascii_case(key))?.id;
+    let id = libraries(s).into_iter().find(|l| !l.missing && l.name.eq_ignore_ascii_case(key))?.id;
     library(s, &id)
 }
 
 fn library_param(s: &Session, p: &Value, cmd: &str) -> Result<(LibraryInfo, Arc<StyleLibrary>)> {
     let key = str_param(p, "library").ok_or_else(|| bad(cmd, "missing `library` (see graphicStyle.libraries)"))?;
-    library(s, key).ok_or_else(|| bad(cmd, format!("no graphic style library `{key}` (see graphicStyle.libraries)")))
+    library(s, key).ok_or_else(|| {
+        s.style_libraries.missing_error(key).unwrap_or_else(|| bad(cmd, format!("no graphic style library `{key}` (see graphicStyle.libraries)")))
+    })
 }
 
 fn list(s: &mut Session, _: &Value) -> Result<Value> {
@@ -113,7 +127,11 @@ fn list(s: &mut Session, _: &Value) -> Result<Value> {
         .into_iter()
         .map(|l| {
             let count = library(s, &l.id).map_or(0, |(_, lib)| lib.len());
-            json!({"id": l.id, "name": l.name, "category": l.category, "count": count, "path": s.style_libraries.path(&l.id)})
+            let mut v = json!({"id": l.id, "name": l.name, "category": l.category, "count": count, "path": s.style_libraries.path(&l.id)});
+            if l.missing {
+                v["missing"] = json!(true);
+            }
+            v
         })
         .collect();
     Ok(json!({ "libraries": libs, "userFolder": s.style_libraries.user_dir() }))
@@ -215,20 +233,46 @@ fn save(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(out)
 }
 
-fn load(s: &mut Session, p: &Value) -> Result<Value> {
+/// Read `bytes`, the contents of the file named `file`, as `graphicStyle.loadLibrary` reads them: a
+/// library file, or a document whose graphic styles become the library.
+fn parse(bytes: &[u8], file: &str) -> Result<StyleLibrary> {
     const C: &str = "graphicStyle.loadLibrary";
-    let (info, lib) = s.style_libraries.load(p, C, |bytes, file| {
-        // A library file, or a document whose graphic styles become the library.
-        match std::str::from_utf8(bytes).ok().filter(|t| style_libs::sniff(t)) {
-            Some(t) => style_libs::read(t, stem(file)).map_err(|e| bad(C, e)),
-            None => {
-                let loaded = super::fileio::load(file, bytes).map_err(|e| bad(C, e.to_string()))?;
-                if loaded.preview_only {
-                    return Err(bad(C, "only this Affinity file's embedded preview could be read; use File › Open to see it with its warning"));
-                }
-                StyleLibrary::from_document(&loaded.doc, &[], stem(file).to_string()).map_err(|e| bad(C, e))
+    match std::str::from_utf8(bytes).ok().filter(|t| style_libs::sniff(t)) {
+        Some(t) => style_libs::read(t, stem(file)).map_err(|e| bad(C, e)),
+        None => {
+            let loaded = super::fileio::load(file, bytes).map_err(|e| bad(C, e.to_string()))?;
+            if loaded.preview_only {
+                return Err(bad(C, "only this Affinity file's embedded preview could be read; use File › Open to see it with its warning"));
             }
+            StyleLibrary::from_document(&loaded.doc, &[], stem(file).to_string()).map_err(|e| bad(C, e))
         }
-    })?;
+    }
+}
+
+fn load(s: &mut Session, p: &Value) -> Result<Value> {
+    let (info, lib) = s.style_libraries.load(p, "graphicStyle.loadLibrary", parse)?;
     Ok(json!({"library": info.id, "name": info.name, "count": lib.len()}))
+}
+
+/// Read the graphic style library files `paths` again as `graphicStyle.loadLibrary` reads them,
+/// each inside the panic guard: the paths [`Libraries::remembered`] gave when the desktop app last
+/// quit, for [`restore`]. It takes no session and can run on any thread.
+pub fn read_remembered(paths: &[String]) -> Vec<RememberedFile<StyleLibrary>> {
+    Libraries::read_remembered(paths, parse)
+}
+
+/// List the graphic style library files [`read_remembered`] read as loaded libraries again. A file
+/// that couldn't be read is listed as missing.
+pub fn restore(s: &mut Session, files: Vec<RememberedFile<StyleLibrary>>) {
+    s.style_libraries.restore(files);
+}
+
+fn remove(s: &mut Session, p: &Value) -> Result<Value> {
+    const C: &str = "graphicStyle.removeLibrary";
+    let key = str_param(p, "library").ok_or_else(|| bad(C, "missing `library` (see graphicStyle.libraries)"))?;
+    let info = s
+        .style_libraries
+        .remove(key)
+        .ok_or_else(|| bad(C, format!("no library `{key}` under Other Libraries (see graphicStyle.libraries, category \"loaded\")")))?;
+    Ok(json!({"library": info.id, "name": info.name}))
 }

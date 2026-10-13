@@ -393,6 +393,155 @@ fn loaded_libraries_copy_into_the_user_folder_without_replacing_files() {
 }
 
 #[test]
+fn libraries_loaded_from_files_are_listed_again_and_a_missing_one_says_so() {
+    let dir = temp_dir("restore");
+    std::fs::create_dir_all(&dir).unwrap();
+    let gpl = dir.join("Loud.gpl").to_string_lossy().to_string();
+    std::fs::write(&gpl, "GIMP Palette\nName: Loud\n255 0 0 Loud Red\n0 0 255 Loud Blue\n").unwrap();
+    let ase = dir.join("Brand.ase").to_string_lossy().to_string();
+    std::fs::write(&ase, vectorcraft_testkit::ase::sample()).unwrap();
+    let mut s = session();
+    run(&mut s, "swatch.library.load", json!({ "path": gpl }));
+    run(&mut s, "swatch.library.load", json!({ "path": ase }));
+    run(&mut s, "swatch.library.load", json!({"data": "GIMP Palette\n0 0 0 Black\n", "name": "Pasted.gpl"}));
+    // The files are kept in menu order; a library loaded from data has no file to read again.
+    let kept = s.swatch_libraries.remembered();
+    assert_eq!(kept, [gpl.clone(), ase.clone()]);
+    std::fs::remove_file(&ase).unwrap();
+    // In a new session, restore lists both again: the one whose file is gone is listed as missing
+    // and named after the file.
+    let mut s = session();
+    cmd::swatchlib::restore(&mut s, cmd::swatchlib::read_remembered(&kept));
+    let (gpl_id, ase_id) = (format!("loaded/{gpl}"), format!("loaded/{ase}"));
+    let loaded = |s: &mut Session| -> Vec<Value> {
+        let list = run(s, "swatch.library.list", json!({}));
+        list["libraries"].as_array().unwrap().iter().filter(|l| l["category"] == "loaded").cloned().collect()
+    };
+    let listed = loaded(&mut s);
+    assert_eq!(listed.len(), 2, "{listed:?}");
+    assert_eq!((listed[0]["id"].as_str(), listed[0]["count"].as_u64(), listed[0].get("missing")), (Some(gpl_id.as_str()), Some(2), None));
+    assert_eq!(listed[1], json!({"id": ase_id, "name": "Brand", "category": "loaded", "count": 0, "path": ase, "missing": true}));
+    // Commands that need its swatches fail with an error that names the file, given its id or name.
+    for (cmd, p) in [
+        ("swatch.library.get", json!({ "library": ase_id })),
+        ("swatch.library.add", json!({"library": "brand"})),
+        ("color.harmony", json!({"color": "#3a7bd5", "rule": "triad", "limitTo": ase_id})),
+    ] {
+        let e = s.execute(cmd, &p).unwrap_err().to_string();
+        assert_eq!(e, format!("library `Brand` is missing: {ase} can't be read"), "{cmd}");
+    }
+    // It stays kept until it is taken off the list, and a second restore lists each library once.
+    assert_eq!(s.swatch_libraries.remembered(), kept);
+    cmd::swatchlib::restore(&mut s, cmd::swatchlib::read_remembered(&kept));
+    assert_eq!(loaded(&mut s).len(), 2);
+    // Loading the file again, once it is back, lists it with its swatches.
+    std::fs::write(&ase, vectorcraft_testkit::ase::sample()).unwrap();
+    let r = run(&mut s, "swatch.library.load", json!({ "path": ase }));
+    assert_eq!((r["library"].as_str(), r["count"].as_u64()), (Some(ase_id.as_str()), Some(4)));
+    assert!(s.swatch_libraries.missing(&ase_id).is_none());
+    assert_eq!(loaded(&mut s).len(), 2);
+    // Remove from Other Libraries takes a loaded library off the list, missing or not, and leaves its file.
+    std::fs::remove_file(&ase).unwrap();
+    let mut s = session();
+    cmd::swatchlib::restore(&mut s, cmd::swatchlib::read_remembered(&kept));
+    let r = run(&mut s, "swatch.library.remove", json!({"library": "Brand"}));
+    assert_eq!((r["library"].as_str(), r["name"].as_str()), (Some(ase_id.as_str()), Some("Brand")));
+    let r = run(&mut s, "swatch.library.remove", json!({ "library": gpl_id }));
+    assert_eq!(r["name"], "Loud");
+    assert!(loaded(&mut s).is_empty() && s.swatch_libraries.remembered().is_empty());
+    assert!(std::path::Path::new(&gpl).exists());
+    for key in [gpl_id.as_str(), "pastels", "nope"] {
+        let e = s.execute("swatch.library.remove", &json!({ "library": key })).unwrap_err().to_string();
+        assert!(e.contains(&format!("no library `{key}` under Other Libraries")), "{e}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A library loaded by a relative path is listed and kept by its absolute path.
+#[cfg(unix)]
+#[test]
+fn a_library_loaded_by_a_relative_path_is_kept_by_its_absolute_path() {
+    let dir = temp_dir("relative");
+    std::fs::create_dir_all(&dir).unwrap();
+    let gpl = dir.join("Relative.gpl");
+    std::fs::write(&gpl, "GIMP Palette\nName: Relative\n10 20 30 Dark\n").unwrap();
+    let cwd = std::env::current_dir().unwrap();
+    let up = "../".repeat(cwd.components().count().saturating_sub(1));
+    let relative = format!("{up}{}", gpl.strip_prefix("/").unwrap().display());
+    assert!(std::path::Path::new(&relative).is_relative());
+    let mut s = session();
+    let id = run(&mut s, "swatch.library.load", json!({ "path": relative }))["library"].as_str().unwrap().to_string();
+    let kept = s.swatch_libraries.remembered();
+    assert_eq!(kept.len(), 1);
+    assert!(std::path::Path::new(&kept[0]).is_absolute(), "{kept:?}");
+    assert_eq!(id, format!("loaded/{}", kept[0]));
+    assert_eq!(std::fs::canonicalize(&kept[0]).unwrap(), std::fs::canonicalize(&gpl).unwrap());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// When parsing one remembered file panics, `restore` lists that library as missing and lists the
+/// other one.
+#[test]
+fn a_remembered_file_whose_reading_panics_is_listed_as_missing() {
+    use cmd::swatchlib::{Libraries, LibraryFile};
+    let dir = temp_dir("panic");
+    std::fs::create_dir_all(&dir).unwrap();
+    let paths: Vec<String> = ["Calm.gpl", "Trap.gpl"]
+        .iter()
+        .map(|file| {
+            let path = dir.join(file);
+            std::fs::write(&path, "GIMP Palette\n255 0 0 Red\n").unwrap();
+            path.to_string_lossy().to_string()
+        })
+        .collect();
+    let files = Libraries::read_remembered(&paths, |bytes, file| {
+        if file == "Trap.gpl" {
+            panic!("a parser bug");
+        }
+        vectorcraft_color::SwatchLibrary::read(bytes, cmd::swatchlib::stem(file)).map_err(EngineError::Other)
+    });
+    let mut s = session();
+    cmd::swatchlib::restore(&mut s, files);
+    let listed: Vec<(&str, bool)> = s.swatch_libraries.infos().map(|l| (l.name.as_str(), l.missing)).collect();
+    assert_eq!(listed, [("Calm", false), ("Trap", true)]);
+    let e = s.execute("swatch.library.get", &json!({"library": "Trap"})).unwrap_err().to_string();
+    assert_eq!(e, format!("library `Trap` is missing: {} can't be read", paths[1]));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A library kind whose reader panics on a file that holds `trap`, as a parser bug would.
+#[derive(Default)]
+struct Trap(String);
+
+impl cmd::swatchlib::LibraryFile for Trap {
+    const EXTS: &'static [&'static str] = &["trap"];
+    fn read(bytes: &[u8], stem: &str) -> std::result::Result<Self, String> {
+        if bytes == b"trap" {
+            panic!("a parser bug");
+        }
+        Ok(Self(stem.to_string()))
+    }
+    fn name(&self) -> &str {
+        &self.0
+    }
+}
+
+/// When reading one file of the user library folder panics, `rescan` skips that file and lists the
+/// other one.
+#[test]
+fn a_user_library_file_whose_reading_panics_is_skipped() {
+    let dir = temp_dir("user-panic");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("Calm.trap"), "calm").unwrap();
+    std::fs::write(dir.join("Loud.trap"), "trap").unwrap();
+    let mut libraries = cmd::swatchlib::Libraries::<Trap>::default();
+    libraries.set_user_dir(Some(dir.to_string_lossy().to_string()));
+    let names: Vec<&str> = libraries.infos().map(|l| l.name.as_str()).collect();
+    assert_eq!(names, ["Calm"]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn a_library_group_stays_one_group_when_a_swatch_has_its_name() {
     use vectorcraft_testkit::ase::{Block, ase};
     let mut s = session();

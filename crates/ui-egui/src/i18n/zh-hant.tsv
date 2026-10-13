@@ -2282,6 +2282,7 @@
 	Remove blank lines between paragraphs	移除段落之間的空白行
 	Remove Brush Stroke	移除筆刷筆畫
 	Remove Effect	移除效果
+	Remove from Other Libraries	從其他資料庫中移除
 	Remove Guide	移除參考線
 	Remove Item	移除項目
 	Remove Plug-in	移除增效模組
@@ -3268,6 +3269,7 @@
 	{kind} Gradient	{kind}漸層
 	{kind} Style Options…	{kind}樣式選項…
 	{kind}, {model}	{kind}，{model}
+	{name} (missing)	{name} (遺失)
 	{name} (spot)	{name} (特別色)
 	{pages} in all, {count} per copy	共 {pages}，每份 {count}
 	{page} of {count}	第 {page} 頁，共 {count} 頁

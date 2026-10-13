@@ -693,6 +693,7 @@ pub(crate) struct GraphicStyleLibraries;
 impl LibraryKind for GraphicStyleLibraries {
     const KIND: &'static str = "graphicStyles";
     const OPEN: &'static str = "window.graphicStyleLibrary";
+    const REMOVE: &'static str = "graphicStyle.removeLibrary";
     const MENU: &'static str = "Graphic Style Libraries Menu";
     const ADD: &'static str = "Add to Graphic Styles";
     /// Styles need room to show their effects.
@@ -702,10 +703,13 @@ impl LibraryKind for GraphicStyleLibraries {
 
     fn list(app: &VectorcraftApp) -> Vec<LibraryRef> {
         let libs = stylelib::libraries(&app.session).into_iter();
-        libs.map(|l| LibraryRef { submenu: library_panel::submenu(l.category), id: l.id, name: l.name }).collect()
+        libs.map(|l| LibraryRef { submenu: library_panel::submenu(l.category), id: l.id, name: l.name, missing: l.missing }).collect()
     }
     fn get(app: &VectorcraftApp, id: &str) -> Option<(String, Self::Lib)> {
         stylelib::library(&app.session, id).map(|(info, lib)| (info.name, shown_library(lib)))
+    }
+    fn missing(app: &VectorcraftApp, key: &str) -> Option<(LibraryInfo, String)> {
+        app.session.style_libraries.missing(key).map(|(info, path)| (info.clone(), path.to_string()))
     }
     fn rows<'a>(lib: &'a Self::Lib, query: &str) -> Vec<Row<'a, LibStyle>> {
         let found = |n: &str| query.is_empty() || n.to_lowercase().contains(query);

@@ -1486,6 +1486,8 @@ lighting	Light	Světlo
 	No matches.	Žádné shody.
 	Other Libraries	Jiné knihovny
 	Previous Library	Předchozí knihovna
+	Remove from Other Libraries	Odebrat z jiných knihoven
+	{name} (missing)	{name} (chybí)
 	Swatch exchange files keep solid colors only.	Soubory pro výměnu vzorníku uchovávají pouze plné barvy.
 	This library is empty.	Tato knihovna je prázdná.
 	Color Space	Barevný prostor
@@ -4003,6 +4005,7 @@ imageTrace	Outline	Obrys
 @msg	no interaction in progress	neprobíhá žádná interakce
 @msg	no key object	žádný klíčový objekt
 @msg	no library `{key}` (see {list})	knihovna `{key}` neexistuje (viz {list})
+@msg	library `{name}` is missing: {path} can't be read	knihovna `{name}` chybí: {path} nelze přečíst
 @msg	no native format	chybí nativní formát
 @msg	no pages	žádné stránky
 @msg	no pattern `{name}`	vzorek `{name}` neexistuje

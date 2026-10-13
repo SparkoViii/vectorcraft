@@ -2791,6 +2791,7 @@
 	Remove blank lines between paragraphs	Üres sorok eltávolítása a bekezdések között
 	Remove Brush Stroke	Ecsetvonás eltávolítása
 	Remove Effect	Effektus eltávolítása
+	Remove from Other Libraries	Eltávolítás a más könyvtárak közül
 	Remove Guide	Segédvonal eltávolítása
 	Remove Item	Elem eltávolítása
 	Remove Plug-in	Bővítmény eltávolítása
@@ -3960,6 +3961,7 @@
 	{kind} Gradient	Színátmenet: {kind}
 	{kind} Style Options…	Stílusbeállítások: {kind}…
 	{kind}, {model}	{kind}, {model}
+	{name} (missing)	{name} (hiányzik)
 	{name} (spot)	{name} (direkt)
 	{pages} in all, {count} per copy	Összesen: {pages}, példányonként: {count}
 	{page} of {count}	{page}/{count}
@@ -4312,6 +4314,7 @@ imageTrace	Outline	Körvonal
 @msg	no key object	nincs kulcsobjektum
 @msg	no library `{id}`	nincs ilyen könyvtár: `{id}`
 @msg	no library `{key}` (see {list})	nincs ilyen könyvtár: `{key}` (lásd: {list})
+@msg	library `{name}` is missing: {path} can't be read	hiányzik a könyvtár: `{name}`; nem olvasható: {path}
 @msg	no Live Paint edge near that point	annál a pontnál nincs élőfestés-él
 @msg	no Live Paint face at that point	annál a pontnál nincs élőfestés-felület
 @msg	no native format	nincs natív formátum

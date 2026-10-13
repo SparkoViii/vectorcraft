@@ -2253,6 +2253,7 @@
 	Remove blank lines between paragraphs	Leerzeilen zwischen Absätzen entfernen
 	Remove Brush Stroke	Pinselkontur entfernen
 	Remove Effect	Effekt entfernen
+	Remove from Other Libraries	Aus „Andere Bibliotheken“ entfernen
 	Remove Guide	Hilfslinie entfernen
 	Remove Item	Element entfernen
 	Remove Plug-in	Plug-in entfernen
@@ -3181,6 +3182,7 @@ effect	Points	Punkte
 	{kind} Gradient	Verlauf ({kind})
 	{kind} Style Options…	{kind}formatoptionen…
 	{kind}, {model}	{kind}, {model}
+	{name} (missing)	{name} (fehlt)
 	{name} (spot)	{name} (Vollton)
 	{pages} in all, {count} per copy	{pages} insgesamt, {count} pro Exemplar
 	{page} of {count}	{page} von {count}
@@ -3606,6 +3608,7 @@ theme	Appearance	Erscheinungsbild
 @msg	no interaction in progress	keine Interaktion im Gange
 @msg	no key object	kein Basisobjekt
 @msg	no library `{key}` (see {list})	keine Bibliothek `{key}` (siehe {list})
+@msg	library `{name}` is missing: {path} can't be read	die Bibliothek `{name}` fehlt: {path} kann nicht gelesen werden
 @msg	no native format	kein natives Format
 @msg	no pages	keine Seiten
 @msg	no pattern `{name}`	kein Muster `{name}`

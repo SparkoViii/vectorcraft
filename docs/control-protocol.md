@@ -202,7 +202,10 @@ one with Alt), so one undo step adds and applies it; Shift/Cmd-clicks select swa
 Add to Swatches.
 `window.swatchLibrary.other {path?}` loads a library file (or another document's swatches) and opens it there;
 opening a `.vcswatches`, `.gpl` or `.ase` file with `app.open` does the same. A file with the same extension and
-bytes as a User Defined library opens as that library. `ui.saveSwatchLibrary {names?}` opens the
+bytes as a User Defined library opens as that library. A library whose file couldn't be read when the app started
+opens with `missing: true`: the panel shows `Missing:` and the file's path, and its Remove from Other Libraries
+button runs `swatch.library.remove`; the panel menu has the same item for every library under Other Libraries.
+`ui.saveSwatchLibrary {names?}` opens the
 `saveSwatchLibrary` dialog (fields `name`, `format`: `vcswatches`/`gpl`/`ase`/`css`, `user`: save to the user library
 folder, `selectedOnly` with `names`); `ui.dialog.confirm` runs `swatch.library.save` (to a file it asks for a path
 and suggests `name` with the format's extension as the file name; the web downloads the file under that name).
@@ -211,8 +214,9 @@ Graphic style libraries open in the same panel: `window.graphicStyleLibrary {lib
 "graphicStyles", id}`; `library: null` closes it). Clicking a style there runs `graphicStyle.addFromLibrary {library,
 name, apply: true, add}` (`add` with Alt), adding and applying it in one undo step; Shift/Cmd-clicks select styles
 for Add to Graphic Styles. `window.graphicStyleLibrary.other {path?}` loads a `.vcstyles` file (or another
-document's graphic styles) and opens it there; opening a `.vcstyles` file with `app.open` does the same. The User
-Defined libraries are `window.userGraphicStyleLibrary1`…`10` in Window → Graphic Style Libraries.
+document's graphic styles) and opens it there; opening a `.vcstyles` file with `app.open` does the same. A missing
+library opens as a missing swatch library does, and Remove from Other Libraries runs `graphicStyle.removeLibrary`. The
+User Defined libraries are `window.userGraphicStyleLibrary1`…`10` in Window → Graphic Style Libraries.
 `ui.saveGraphicStyleLibrary {names?}` opens the `saveGraphicStyleLibrary` dialog (fields `name`, `user`: save to the
 user library folder, `selectedOnly` with `names`); `ui.dialog.confirm` runs `graphicStyle.saveLibrary` (to a file it
 asks for a path and suggests `name` with `.vcstyles` as the file name; the web downloads the file under that name).
