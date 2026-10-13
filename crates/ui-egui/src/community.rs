@@ -1,39 +1,32 @@
 //! Community and project links: the Discord button (header, About, Home) and the link list.
-//! Icons are Lucide's (ISC); Discord's own logo is a trademark, so the button uses a chat icon
-//! on Discord's colour with the word "Discord".
+//! Icons are Lucide's (ISC). The title-bar control matches PhotoCraft: a frameless chat icon
+//! and the word Discord in the interface colour. About and Home use the same primary button.
 
-use egui::{Color32, CornerRadius, Sense, Ui, vec2};
+use egui::{Color32, Ui, vec2};
 
 use crate::theme::{self, Tokens};
 use crate::{VectorcraftApp, icons};
 
-/// Discord's brand colour (a colour, not a logo).
-const DISCORD: Color32 = Color32::from_rgb(0x58, 0x65, 0xF2);
-
-/// The Discord button's label, height and width.
-fn discord_layout(ui: &Ui, large: bool) -> (std::sync::Arc<egui::Galley>, f32, f32) {
-    let (h, font, label) = if large { (36.0, theme::semibold(14.0), tl!("Join our Discord")) } else { (24.0, theme::semibold(12.0), "Discord") };
-    let galley = ui.painter().layout_no_wrap(label.to_string(), font, Color32::WHITE);
-    let w = galley.size().x + h * 0.55 + h * 0.9;
-    (galley, h, w)
+/// The title-bar Discord control's width (the app bar drops it when space runs out).
+pub fn discord_width(ui: &Ui, _large: bool) -> f32 {
+    let galley = ui.painter().layout_no_wrap("Discord".into(), egui::FontId::proportional(12.0), Color32::WHITE);
+    galley.size().x + 14.0 + ui.spacing().icon_spacing + ui.spacing().button_padding.x * 2.0
 }
 
-/// The Discord button's width (the app bar drops it when space runs out).
-pub fn discord_width(ui: &Ui, large: bool) -> f32 {
-    discord_layout(ui, large).2
-}
-
-/// A Discord pill button: compact for the header, large for About / Home.
+/// Discord in the title bar, or the primary "Join us on Discord" button on About and Home.
 pub fn discord_button(app: &mut VectorcraftApp, ui: &mut Ui, large: bool) -> egui::Response {
-    let (galley, h, w) = discord_layout(ui, large);
-    let icon = h * 0.55;
-    let (r, resp) = ui.allocate_exact_size(vec2(w, h), Sense::click());
-    let fill = if resp.hovered() { DISCORD.gamma_multiply(0.85) } else { DISCORD };
-    ui.painter().rect_filled(r, CornerRadius::same((h / 2.0) as u8), fill);
-    let ir = egui::Rect::from_center_size(r.left_center() + vec2(h * 0.35 + icon / 2.0, 0.0), vec2(icon, icon));
-    icons::paint(ui, "message-circle", ir, Color32::WHITE);
-    ui.painter().galley(egui::pos2(ir.right() + h * 0.2, r.center().y - galley.size().y / 2.0), galley, Color32::WHITE);
-    let resp = resp.on_hover_text(tl!("Join the ArtCraft community on Discord (discord.gg/artcraft)"));
+    let tip = tl!("Join the ArtCraft community on Discord (discord.gg/artcraft)");
+    let resp = if large {
+        crate::widgets::primary_button(ui, "Join us on Discord").on_hover_text(tip)
+    } else {
+        let t = Tokens::get(ui.ctx());
+        let button = egui::Button::image_and_text(
+            egui::Image::new(icons::source("message-square")).fit_to_exact_size(vec2(14.0, 14.0)).tint(t.text_dim),
+            egui::RichText::new(tl!("Discord")).color(t.text_dim).size(12.0),
+        )
+        .frame(false);
+        ui.add(button).on_hover_text(tip)
+    };
     if resp.clicked() {
         app.open_link("help.discord");
     }
