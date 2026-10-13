@@ -3903,3 +3903,20 @@ lighting	Light	光源
 @msg	unknown parameter `{key}`; the command takes: {keys}	未知参数 `{key}`；该命令接受：{keys}
 	Load EPS into Clipboard	将 EPS 载入剪贴板
 @msg	an image of {w} × {h} pixels is too large to draw	{w} × {h} 像素的图像过大，无法绘制
+# Dimension tool (linked dimension annotations)
+	 a highlighted edge, then click to place its dimension | 	高亮显示的边缘，然后单击以放置尺寸标注 | 
+	 cancels | Double-click the tool for options	以取消 | 双击工具以打开选项
+	All selected edges	所有选定的边缘
+	Create Dimension	创建尺寸标注
+	Dimension Selected Paths	为选定路径标注尺寸
+	Dimension Tool	尺寸标注工具
+	Dimension Tool Options	尺寸标注工具选项
+	Drawing : real size — 1:10 means 1 cm on the page represents 10 cm.	图纸 : 实际尺寸 — 1:10 表示页面上的 1 cm 代表实际的 10 cm。
+	Font Family:	字体系列：
+	Font Style:	字体样式：
+	Precision:	精度：
+	Preview (1 cm on page)	预览（页面上的 1 cm）
+	Update Dimensions	更新尺寸标注
+	Display	显示
+
+# Dimension tool and Object › Dimensions (dimension groups, their dialog and messages).
