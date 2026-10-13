@@ -2,9 +2,12 @@
 //! params' top level or from an `svg` object (which wins), and the files an SVG export writes
 //! (one per artboard, plus the images it links to).
 
+use std::sync::Arc;
+
 use serde::Deserialize;
 use serde_json::{Map, Value};
-use vectorcraft_doc::Document;
+use vectorcraft_doc::{Document, Node, NodeKind};
+use vectorcraft_geom::Rect;
 use vectorcraft_svg::ExportOptions;
 
 use super::encode::{ARTBOARD_PARAMS, ArtboardPick, Encoded};
@@ -162,8 +165,8 @@ pub(super) fn encode(doc: &Document, p: &Value, compressed: bool) -> Result<Enco
     let doc = flat.as_ref().unwrap_or(doc);
     let mut enc = Encoded { warnings, ..Encoded::default() };
     for artboard in boards {
-        // A chosen artboard's file holds the art over it (#550).
-        let over = artboard.filter(|_| chosen).and_then(|b| doc.artboards.get(b)).map(|a| super::export::art_over(doc, a.rect));
+        // A chosen artboard's file holds the art over it (#550), clipped to it.
+        let over = artboard.filter(|_| chosen).and_then(|b| doc.artboards.get(b)).map(|a| clipped_to(super::export::art_over(doc, a.rect), a.rect));
         let mut out = vectorcraft_svg::export_full(over.as_ref().unwrap_or(doc), &ExportOptions { artboard, ..opts.clone() }, native.as_deref());
         let bytes = out.take_bytes();
         for l in out.linked {
@@ -185,4 +188,36 @@ pub(super) fn encode(doc: &Document, p: &Value, compressed: bool) -> Result<Enco
         enc.warnings.push(w);
     }
     Ok(enc)
+}
+
+/// `d` with the art of each layer clipped to `rect` (a chosen artboard), so art crossing the
+/// artboard's edge shows only its part over it wherever the file goes (placed or opened, not only
+/// in viewers that crop to the viewBox). A clipping layer keeps its own clip inside the artboard's.
+fn clipped_to(mut d: Document, rect: Rect) -> Document {
+    let layers = std::mem::take(&mut d.layers);
+    d.layers = layers
+        .into_iter()
+        .map(|l| {
+            let own_clip = match &l.kind {
+                NodeKind::Layer { template: false, clip, children, .. } if !children.is_empty() => *clip,
+                _ => return l,
+            };
+            let mut layer = Node::clone(&l);
+            let board = Arc::new(crate::cmd::place::clip_path(d.alloc_id(), rect));
+            let inner = own_clip.then(|| d.alloc_id());
+            let Some(children) = layer.children_mut() else { return l };
+            match inner {
+                Some(id) => {
+                    let art = Node::new(id, NodeKind::Group { children: std::mem::take(children), clip: true });
+                    *children = vec![board, Arc::new(art)];
+                }
+                None => children.insert(0, board),
+            }
+            if let NodeKind::Layer { clip, .. } = &mut layer.kind {
+                *clip = true;
+            }
+            Arc::new(layer)
+        })
+        .collect();
+    d
 }
