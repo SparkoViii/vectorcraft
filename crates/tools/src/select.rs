@@ -1,6 +1,6 @@
 //! The Selection tool (V): click/shift-click, marquee (Shift-drag toggles the objects it reaches:
 //! the selected ones are deselected, the others selected), move (Alt copies, Shift constrains; Smart
-//! Guides, or with them off View › Snap to Point, snap it),
+//! Guides, or with them off View › Snap to Point, snap it, unless Cmd/Ctrl is held),
 //! bounding-box scale (Shift proportional, Alt from centre) and rotate (outside corners, Shift 45°),
 //! drag a live rectangle's or polygon's corner widget to round its corners (Alt-click cycles their kind,
 //! double-click opens the Corners dialog), double-click a group or an object to enter isolation
@@ -381,7 +381,11 @@ impl Tool for SelectionTool {
                     self.moving = Some(MoveSnap::new(cx));
                 }
                 let mut d = move_delta(start, p, m.shift);
-                if let Some(snap) = &self.moving {
+                self.guides.clear();
+                // Cmd held suspends snapping for as long as it is down (#1745).
+                if !m.cmd
+                    && let Some(snap) = &self.moving
+                {
                     (d, self.guides) = snap.snap(cx, start, d, m.alt);
                 }
                 self.state = State::Moving { start, began: true, deselect: None, key: None };
@@ -766,6 +770,28 @@ mod tests {
         assert!((dx(&c, 172.0) - 23.4).abs() < 1e-9, "onto the guide");
         assert_eq!(dx(&c, 165.0), 15.0, "out of reach");
         assert_eq!(dx(&ToolContext { snap_to_point: false, ..cx(&d, &s, &p) }, 172.0), 22.0);
+    }
+
+    /// Cmd (Ctrl elsewhere) held during a move suspends snapping while it is down (#1745): the
+    /// grabbed point passes the ruler guide by, and lands on it again once Cmd is let go.
+    #[test]
+    fn cmd_held_mid_move_suspends_snapping() {
+        let (mut d, id) = doc_with_rect();
+        d.guides = vec![vectorcraft_doc::Guide::new(true, 173.4)];
+        let mut s = Selection::default();
+        s.add(id);
+        let p = paint();
+        let c = cx(&d, &s, &p);
+        let mut t = SelectionTool::default();
+        let dx = |a: &[Action]| {
+            let Some(Action::Preview(_, v)) = a.last() else { panic!("{a:?}") };
+            v["matrix"][4].as_f64().unwrap()
+        };
+        t.pointer(&c, &ev(PointerKind::Down, 150.0, 150.0));
+        let cmd = Mods { cmd: true, ..Mods::default() };
+        assert_eq!(dx(&t.pointer(&c, &ev(PointerKind::Drag, 172.0, 150.0).with_mods(cmd))), 22.0);
+        assert!(t.guides.is_empty());
+        assert!((dx(&t.pointer(&c, &ev(PointerKind::Drag, 172.0, 150.0))) - 23.4).abs() < 1e-9, "onto the guide");
     }
 
     /// Alt pressed during a move makes a copy, which snaps to the original it leaves behind (as
