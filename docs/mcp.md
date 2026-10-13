@@ -1725,7 +1725,8 @@ The Selection & Anchor Display and General preferences apply to `pointer_gesture
   elsewhere) selects the object under the selected one there, the next such click the one under that, then the
   topmost again. Cmd held to borrow the selection tool from another tool clicks as usual.
 - `doubleClickToIsolate` (on by default): a `doubleclick` with the Selection tool isolates a group, a compound path or a
-  single path, image, mesh or placed file (not type, blends, envelopes, repeats or symbol instances); off, it no longer does.
+  single path, image, mesh or placed file (not type, blends, envelopes, repeats or symbol instances); new art made while
+  a single object is isolated widens the isolation to its group or layer. Off, a double-click no longer isolates.
 - `usePreciseCursors`: the Pen, Eyedropper, Slice and Blend tools' pointers are a crosshair.
 - `snapToPointTolerance` (1–8 px, 2 by default): with View › Snap to Point on and Smart Guides off (desktop app), the
   point a selection is dragged by, a drawn point and a transform tool's reference point land on an anchor or a ruler

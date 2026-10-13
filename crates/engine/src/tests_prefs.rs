@@ -333,17 +333,43 @@ fn double_clicking_a_single_object_isolates_it() {
     s.execute("select.none", &json!({})).unwrap();
     s.execute("select.all", &json!({})).unwrap();
     assert_eq!(s.doc().unwrap().selection.objects, vec![a]);
-    // A second double-click on it stays in isolation; new art lands on its layer.
+    // A second double-click on it stays in isolation; a double-click on the empty canvas leaves
+    // it, the object selected.
     ev(&mut s, &double, 125.0, 125.0);
     assert_eq!(s.doc().unwrap().isolation, Some(a));
-    let c = rect(&mut s, 300.0);
-    let st = s.doc().unwrap();
-    assert_eq!(st.doc.parent_of(c), st.doc.parent_of(a));
-    // A double-click on the empty canvas leaves isolation, the object selected.
     ev(&mut s, &double, 50.0, 350.0);
     let st = s.doc().unwrap();
     assert_eq!((st.isolation, st.selection.objects.clone()), (None, vec![a]));
-    assert!(st.doc.node(b).is_some());
+    // New art lands beside it, and the isolation widens to its group or layer so that the new art
+    // can be selected: a command and a drawing tool alike.
+    let layer = s.doc().unwrap().doc.parent_of(a);
+    for draw in [true, false] {
+        ev(&mut s, &double, 125.0, 125.0);
+        assert_eq!(s.doc().unwrap().isolation, Some(a));
+        let before = s.doc().unwrap().doc.layers[0].children().unwrap().len();
+        if draw {
+            s.select_tool("rectangle", ViewInfo::default()).unwrap();
+            ev(&mut s, &[PointerKind::Down], 300.0, 300.0);
+            ev(&mut s, &[PointerKind::Drag, PointerKind::Up], 340.0, 340.0);
+            s.select_tool("selection", ViewInfo::default()).unwrap();
+        } else {
+            rect(&mut s, 300.0);
+        }
+        let st = s.doc().unwrap();
+        assert_eq!(st.doc.layers[0].children().unwrap().len(), before + 1, "draw {draw}");
+        assert_eq!(st.isolation, layer, "draw {draw}");
+        ev(&mut s, &click, 225.0, 125.0);
+        assert_eq!(s.doc().unwrap().selection.objects, vec![b], "draw {draw}: the rest of the layer is editable");
+        s.execute("object.exitIsolation", &json!({})).unwrap();
+    }
+    // Inside an isolated group, a single object's new art widens the isolation to the group.
+    s.execute("select.set", &json!({"ids": [a.0, b.0]})).unwrap();
+    let g = id(s.execute("object.group", &json!({})).unwrap());
+    s.execute("object.isolate", &json!({"id": a.0})).unwrap();
+    let c = rect(&mut s, 0.0);
+    let st = s.doc().unwrap();
+    assert_eq!((st.doc.parent_of(c), st.isolation), (Some(g), Some(g)));
+    s.execute("object.exitIsolation", &json!({})).unwrap();
     // Type is not isolated.
     let t = id(s.execute("text.create", &json!({"x": 100, "y": 300, "text": "Type"})).unwrap());
     assert!(s.execute("object.isolate", &json!({"id": t.0})).is_err());

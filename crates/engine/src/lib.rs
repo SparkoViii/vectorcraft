@@ -1339,10 +1339,12 @@ impl Session {
             self.note_depth = 1;
             self.batch_stash = None;
         }
+        let single = if self.depth == 0 { self.single_isolation() } else { None };
         let r = if self.depth == 0 { self.run_guarded(id, |s| (spec.run)(s, params)) } else { self.run_nested(|s| (spec.run)(s, params)) };
         let r = r?;
         if self.depth == 0 {
             self.inherit_new_art();
+            self.widen_single_isolation(single);
         }
         if spec.journal && self.depth == 0 && self.active().is_none_or(|d| d.interaction.is_none()) {
             let p = self.noted(params);
@@ -1352,6 +1354,30 @@ impl Session {
             self.after_command();
         }
         Ok(r)
+    }
+
+    /// While a single object (not a group or layer) is isolated: the group or layer it is in and
+    /// the objects there, for [`Self::widen_single_isolation`].
+    fn single_isolation(&self) -> Option<(NodeId, Vec<NodeId>)> {
+        let st = self.active()?;
+        let iso = st.isolation.filter(|i| st.doc.node(*i).is_some_and(|n| !n.is_container()))?;
+        let parent = st.doc.parent_of(iso)?;
+        let siblings = st.doc.node(parent)?.children()?.iter().map(|c| c.id).collect();
+        Some((parent, siblings))
+    }
+
+    /// New art made while a single object is isolated lands beside it, in its group or layer
+    /// ([`DocState::insertion_parent`]): the isolation widens to that group or layer, so the new
+    /// art can be selected and edited at once.
+    fn widen_single_isolation(&mut self, before: Option<(NodeId, Vec<NodeId>)>) {
+        let Some((parent, siblings)) = before else { return };
+        let Ok(st) = self.doc_mut() else { return };
+        let Some(p) = st.doc.node(parent).filter(|n| matches!(n.kind, NodeKind::Group { .. } | NodeKind::Layer { .. })) else { return };
+        let added = p.children().is_some_and(|c| c.iter().any(|c| !siblings.contains(&c.id)));
+        if added && st.isolation.is_some_and(|i| st.doc.parent_of(i) == Some(parent)) {
+            st.isolation = Some(parent);
+            st.revision += 1;
+        }
     }
 
     /// Is the interface in Japanese? Then new type starts with em box top-to-top leading and em
