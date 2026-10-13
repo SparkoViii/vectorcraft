@@ -4,6 +4,8 @@
 (newline-delimited JSON-RPC 2.0; see [Protocol](#protocol) for version negotiation). Agents use it to
 draw, inspect and look at VectorCraft documents.
 
+The same commands can be scripted in JavaScript: see [scripting.md](scripting.md).
+
 It has two backends:
 
 | Mode | How | What works |

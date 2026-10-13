@@ -231,7 +231,7 @@ The scores are self-assessed from our code against Illustrator's public document
 - 3D and Materials beyond the initial live Revolve (Extrude & Bevel, Inflate, Rotate, materials);
 - about half of the Photoshop-style raster effects (28 of 57 still missing; Film Grain is available under Artistic) and the Effect Gallery;
 - CJK composition for vertical type (vertical type itself has initial support, with a Japanese interface);
-- scripting, and the rest of Variables (image and graph kinds, dataset import);
+- Illustrator's scripting object model (JavaScript scripts over VectorCraft's own commands work), Batch, and the rest of Variables (image and graph kinds, dataset import);
 - generative AI features.
 
 **Where we're going:** next is the interaction-fidelity pass, `.ai` files from real users and start-up stability,

@@ -4261,6 +4261,13 @@ lighting	Light	Lumière
 @msg	unsupported native docking operation	Opération native d’ancrage non prise en charge
 	Linux Display Server	Serveur d’affichage Linux
 	X11 (XWayland)	X11 (XWayland)
+	Script “{name}” failed.	Le script « {name} » a échoué.
+	Script “{name}” finished.	Le script « {name} » est terminé.
+@msg	Ran script {name} ({_1} commands)	Script {name} exécuté ({_1} commandes)
+@msg	Script {name} failed: {error}	Le script {name} a échoué : {error}
+	Open Scripts Folder	Ouvrir le dossier des scripts
+	Clear Recent Scripts	Effacer les scripts récents
+@msg	there is no Scripts folder here	il n’y a pas de dossier des scripts ici
 	Ruler Origin	Origine des règles
 	Reset Ruler Origin	Réinitialiser l’origine des règles
 	Artistic	Artistique

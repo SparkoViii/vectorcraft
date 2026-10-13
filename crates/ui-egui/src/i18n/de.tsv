@@ -4207,6 +4207,13 @@ theme	Appearance	Erscheinungsbild
 @msg	unsupported native docking operation	Nicht unterstützte native Docking-Operation
 	Linux Display Server	Linux-Anzeigeserver
 	X11 (XWayland)	X11 (XWayland)
+	Script “{name}” failed.	Skript „{name}“ ist fehlgeschlagen.
+	Script “{name}” finished.	Skript „{name}“ ist fertig.
+@msg	Ran script {name} ({_1} commands)	Skript {name} ausgeführt ({_1} Befehle)
+@msg	Script {name} failed: {error}	Skript {name} fehlgeschlagen: {error}
+	Open Scripts Folder	Skriptordner öffnen
+	Clear Recent Scripts	Zuletzt verwendete Skripte löschen
+@msg	there is no Scripts folder here	hier gibt es keinen Skriptordner
 	Ruler Origin	Linealursprung
 	Reset Ruler Origin	Linealursprung zurücksetzen
 	Artistic	Kunstfilter

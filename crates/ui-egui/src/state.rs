@@ -338,6 +338,9 @@ pub struct UiState {
     /// File → Open Recent Files, most recent first.
     #[serde(default)]
     pub recent_files: Vec<String>,
+    /// File › Scripts: the scripts run lately, most recent first ([`crate::scripts`]).
+    #[serde(default)]
+    pub recent_scripts: Vec<String>,
     /// Type → Recent Fonts, most recent first.
     #[serde(default)]
     pub recent_fonts: Vec<String>,
@@ -636,6 +639,7 @@ impl Default for UiState {
             workspace: default_workspace(),
             custom_workspaces: vec![],
             recent_files: vec![],
+            recent_scripts: vec![],
             recent_fonts: vec![],
             favorite_fonts: vec![],
             engine_prefs: Value::Null,

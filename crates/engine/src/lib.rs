@@ -27,6 +27,7 @@ use vectorcraft_tools::{PaintDefaults, Tool};
 pub use cmd::EyedropperOptions;
 pub use cmd::clipboard::Clipboard;
 pub use cmd::distortcmds::perspective_click;
+pub use cmd::fileio::BatchRun;
 pub use cmd::params::{check_keys, check_params};
 pub use cmd::rasterfx::{export_pdf, flatten_raster_effects};
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
@@ -1585,6 +1586,11 @@ impl Session {
     }
 
     pub fn commit_interaction(&mut self) -> Result<()> {
+        // A batch's steps run inside its own interaction, which the batch keeps or rolls back as a
+        // whole: a step that commits what is in progress (Undo, Type) leaves it alone.
+        if self.depth > 0 && self.batch_stash.is_some() {
+            return Ok(());
+        }
         self.remember_pending_paint();
         let st = self.doc_mut()?;
         let Some(mut it) = st.interaction.take() else { return Ok(()) };
@@ -1698,6 +1704,8 @@ mod tests_areafit;
 mod tests_assets;
 #[cfg(test)]
 mod tests_attributes;
+#[cfg(test)]
+mod tests_batchrun;
 #[cfg(test)]
 mod tests_bboxrotate;
 #[cfg(test)]

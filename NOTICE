@@ -30,6 +30,13 @@ based in part on the work of the Independent JPEG Group.
 WebAssembly plug-ins run in the wasmi interpreter (MIT OR Apache-2.0); its wasmparser dependency is
 under the Apache License 2.0 with the LLVM exception.
 
+Scripts run in the Boa JavaScript engine (boa_engine and its boa_* crates, MIT OR Unlicense).
+
+Test scripts only (crates/script/tests/thirdparty, not shipped): tinycolor 1.4.2 (Brian Grinstead),
+Alea from seedrandom 3.0.5 (Johannes Baagøe, David Bau), simplex-noise 2.4.0 (Jonas Wagner) and
+bezier-easing 2.1.0 (Gaëtan Renaudeau), each under the MIT License, kept unmodified with their
+license texts beside them (Alea's is in its file header).
+
 The experimental Windows 7 build (packaging/windows/windows7.ps1) compiles a modified copy of the
 windows-link crate 0.2.1 (vendor/windows-link; Microsoft, MIT OR Apache-2.0) that binds CoTaskMemFree
 through ole32.dll. Its license texts are in vendor/windows-link and ship in that build's ZIP; every

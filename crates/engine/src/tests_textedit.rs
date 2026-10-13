@@ -596,6 +596,42 @@ fn a_fill_chosen_with_characters_selected_colours_only_them() {
     assert!(obj(&s, id).runs.iter().all(|r| r.style.fill == before));
 }
 
+/// Typing still in progress when a batch (a script) starts is kept as its own step first.
+#[test]
+fn a_failed_batch_keeps_the_typing_in_progress() {
+    let mut s = session();
+    let v = ViewInfo::default();
+    s.select_tool("type", v).unwrap();
+    click(&mut s, 200.0, 200.0);
+    let id = s.doc().unwrap().selection.objects[0];
+    s.tool_text("Hello", v).unwrap();
+    assert!(s.in_interaction());
+    let r = s.execute(
+        "command.batch",
+        &json!({"commands": [{"command": "shape.rectangle", "params": {"x": 0, "y": 0, "width": 5, "height": 5}}, {"command": "no.such.command", "params": {}}]}),
+    );
+    assert!(r.is_err());
+    assert_eq!(obj(&s, id).plain_text(), "Hello");
+}
+
+#[test]
+fn a_batch_during_typing_is_its_own_undo_step() {
+    let mut s = session();
+    let v = ViewInfo::default();
+    s.select_tool("type", v).unwrap();
+    click(&mut s, 200.0, 200.0);
+    let id = s.doc().unwrap().selection.objects[0];
+    s.tool_text("Hello", v).unwrap();
+    s.execute(
+        "command.batch",
+        &json!({"label": "Logo", "commands": [{"command": "shape.rectangle", "params": {"x": 0, "y": 0, "width": 5, "height": 5}}]}),
+    )
+    .unwrap();
+    assert_eq!(undo_labels(&s).last().map(String::as_str), Some("Logo"));
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(obj(&s, id).plain_text(), "Hello", "undoing the batch leaves the typing");
+}
+
 /// A fill or stroke that the characters selected with the Type tool have already records no undo
 /// step: the step to redo stays and the document stays unmodified.
 #[test]

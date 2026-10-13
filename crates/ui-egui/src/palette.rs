@@ -45,13 +45,14 @@ struct Entry {
 /// The palette's entries in `lang`. They are built when the language, the installed plug-ins or
 /// the keyboard shortcuts (shown beside each entry) change, not on every frame while a query is
 /// typed.
-/// What the entries depend on: the language, the installed plug-ins and the shortcuts.
-fn cache_key(lang: crate::i18n::Lang) -> (&'static str, u64, u64) {
-    (lang.code(), menus::plugin_revision(), crate::shortcut_editor::GENERATION.load(std::sync::atomic::Ordering::Relaxed))
+/// What the entries depend on: the language, the installed plug-ins, the scripts File › Scripts
+/// lists and the shortcuts.
+fn cache_key(lang: crate::i18n::Lang) -> (&'static str, u64, u64, u64) {
+    (lang.code(), menus::plugin_revision(), crate::scripts::revision(), crate::shortcut_editor::GENERATION.load(std::sync::atomic::Ordering::Relaxed))
 }
 
 fn entries(ctx: &egui::Context, lang: crate::i18n::Lang) -> Arc<Vec<Entry>> {
-    type Cached = ((&'static str, u64, u64), Arc<Vec<Entry>>);
+    type Cached = ((&'static str, u64, u64, u64), Arc<Vec<Entry>>);
     let key = cache_key(lang);
     let id = egui::Id::new("palette-entries");
     if let Some((k, v)) = ctx.data(|d| d.get_temp::<Cached>(id))

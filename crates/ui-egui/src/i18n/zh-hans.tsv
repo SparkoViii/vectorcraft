@@ -3844,6 +3844,10 @@ lighting	Light	光源
 	Move Guide to Layer	将参考线移至图层
 	Linux Display Server	Linux 显示服务器
 	X11 (XWayland)	X11 (XWayland)
+	Script “{name}” failed.	脚本“{name}”运行失败。
+	Script “{name}” finished.	脚本“{name}”已运行完毕。
+	Open Scripts Folder	打开脚本文件夹
+	Clear Recent Scripts	清除最近使用的脚本
 	Ruler Origin	标尺原点
 	Reset Ruler Origin	重置标尺原点
 	Artistic	艺术效果

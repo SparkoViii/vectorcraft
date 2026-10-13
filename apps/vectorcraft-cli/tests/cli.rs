@@ -346,3 +346,104 @@ fn run_with_a_closed_stdout_ends_quietly_and_finishes_the_batch() {
     let out = Command::new(BIN).args(["run", "--cmd", "not-a-command"]).stdout(Stdio::null()).output().unwrap();
     assert!(!out.status.success());
 }
+
+fn script_file(name: &str, src: &str) -> std::path::PathBuf {
+    let p = tmp(name);
+    std::fs::write(&p, src).unwrap();
+    p
+}
+
+#[test]
+fn script_draws_exports_and_prints_its_value() {
+    let js = script_file(
+        "draw.js",
+        "const {id} = vc.run('shape.ellipse', {x: 10, y: 10, width: 80, height: 60});\n\
+         vc.run('paint.setFill', {ids: [id], color: vc.args.color});\n\
+         vc.log('drew', id); alert('done'); ({ color: vc.args.color })",
+    );
+    let svg = tmp("script.svg");
+    let out = Command::new(BIN).args(["script", js.to_str().unwrap(), "--arg", "color=#3366ff", "--out", svg.to_str().unwrap()]).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines[0], "done");
+    assert_eq!(serde_json::from_str::<Value>(lines[1]).unwrap(), json!({"color": "#3366ff"}));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("drew"));
+    assert!(std::fs::read_to_string(&svg).unwrap().contains("3366ff"));
+}
+
+#[test]
+fn script_errors_exit_1_with_the_position() {
+    let js = script_file("boom.js", "vc.run('shape.rectangle', {x: 0, y: 0, width: 5, height: 5});\nthrow new Error('kaput');\n");
+    let out = Command::new(BIN).args(["script", js.to_str().unwrap()]).output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("boom.js:2:") && err.contains("kaput"), "{err}");
+}
+
+#[test]
+fn script_opens_a_document() {
+    let svg = tmp("count.svg");
+    let ok = Command::new(BIN)
+        .args(["run", "--cmd", "shape.rectangle", "--params", r#"{"x":0,"y":0,"width":10,"height":10}"#, "--export", svg.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(ok.status.success());
+    let js = script_file("count.js", "vc.document().objects > 0");
+    let out = Command::new(BIN).args(["script", js.to_str().unwrap(), svg.to_str().unwrap()]).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(String::from_utf8(out.stdout).unwrap().trim(), "true");
+}
+
+/// `script --automation-read-root` / `--automation-write-root`: every path a script's commands
+/// reach is checked as for `mcp` (#832), and so are the DOCUMENT argument and `--out`.
+#[test]
+fn script_automation_roots() {
+    let base = tmp("script-roots");
+    for d in ["in", "out", "outside"] {
+        std::fs::create_dir_all(base.join(d)).unwrap();
+    }
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="20" height="10"/></svg>"#;
+    std::fs::write(base.join("in/a.svg"), svg).unwrap();
+    std::fs::write(base.join("outside/b.svg"), svg).unwrap();
+    let file = |d: &str, f: &str| base.join(d).join(f).to_string_lossy().into_owned();
+    let js = script_file("roots.js", "vc.run(vc.args.cmd, {path: vc.args.path}); 'ran'");
+    let run = |cmd: &str, path: &str, extra: &[&str]| {
+        let roots = ["--automation-read-root", &file("in", ""), "--automation-write-root", &file("out", "")];
+        let args = ["script", js.to_str().unwrap(), "--arg", &format!("cmd={cmd}"), "--arg", &format!("path={path}")];
+        Command::new(BIN).args(args).args(extra).args(roots).output().unwrap()
+    };
+    let rejected = |out: std::process::Output, root: &str| {
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(1), "{err}");
+        assert!(err.contains(&format!("outside the {root} root")), "{err}");
+    };
+
+    assert!(run("document.open", &file("in", "a.svg"), &[]).status.success());
+    assert!(run("file.place", &file("in", "a.svg"), &[]).status.success());
+    assert!(run("file.saveAs", &file("out", "a.svg"), &[]).status.success());
+    assert!(base.join("out/a.svg").is_file());
+
+    rejected(run("document.open", &file("outside", "b.svg"), &[]), "read");
+    rejected(run("document.open", &file("in", "../outside/b.svg"), &[]), "read");
+    rejected(run("file.place", &file("outside", "b.svg"), &[]), "read");
+    rejected(run("file.saveAs", &file("outside", "c.svg"), &[]), "write");
+    rejected(run("document.export", &file("outside", "c.png"), &[]), "write");
+    rejected(run("file.saveAs", &file("out", "../outside/c.svg"), &[]), "write");
+    assert!(!base.join("outside/c.svg").exists() && !base.join("outside/c.png").exists());
+
+    // The document to open and the `--out` exports are confined too.
+    rejected(run("document.open", &file("in", "a.svg"), &[&file("outside", "b.svg")]), "read");
+    rejected(run("document.open", &file("in", "a.svg"), &["--out", &file("outside", "d.png")]), "write");
+    assert!(!base.join("outside/d.png").exists());
+}
+
+#[test]
+fn script_rejects_bad_arguments() {
+    let js = script_file("noop.js", "1");
+    let out = Command::new(BIN).args(["script", js.to_str().unwrap(), "--arg", "novalue"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("KEY=VALUE"));
+    let out = Command::new(BIN).args(["script"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+}

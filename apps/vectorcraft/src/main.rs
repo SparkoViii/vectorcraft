@@ -522,6 +522,7 @@ fn services(parent: Parent, ui: egui::Context) -> Services {
         reveal: Some(Box::new(reveal)),
         // Links panel: Edit Original; Package: Show Package. Relink to Folder and Package pick folders.
         open_file: Some(Box::new(open_file)),
+        scripts_folder: vectorcraft_engine::cmd::fileio::scripts_folder(),
         pick_folder: Some(Box::new(move || pick_now(PickRequest::Folder, &p4).into_iter().next())),
         // File → Print: the system's printers and print queue.
         print: Some(Box::new(printing::SystemPrint)),

@@ -4247,6 +4247,13 @@ lighting	Light	ライト
 @msg	unsupported native docking operation	ネイティブドッキング操作は未対応です
 	Linux Display Server	Linux ディスプレイサーバー
 	X11 (XWayland)	X11 (XWayland)
+	Script “{name}” failed.	スクリプト「{name}」が失敗しました。
+	Script “{name}” finished.	スクリプト「{name}」が終了しました。
+@msg	Ran script {name} ({_1} commands)	スクリプト {name} を実行しました（{_1} 個のコマンド）
+@msg	Script {name} failed: {error}	スクリプト {name} が失敗しました: {error}
+	Open Scripts Folder	スクリプトフォルダーを開く
+	Clear Recent Scripts	最近使用したスクリプトを消去
+@msg	there is no Scripts folder here	ここにはスクリプトフォルダーがありません
 	Ruler Origin	定規の原点
 	Reset Ruler Origin	定規の原点をリセット
 	Artistic	アーティスティック

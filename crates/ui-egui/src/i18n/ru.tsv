@@ -4249,6 +4249,13 @@ lighting	Light	Свет
 @msg	unsupported native docking operation	Неподдерживаемая собственная операция прикрепления
 	Linux Display Server	Дисплейный сервер Linux
 	X11 (XWayland)	X11 (XWayland)
+	Script “{name}” failed.	Сценарий «{name}» завершился с ошибкой.
+	Script “{name}” finished.	Сценарий «{name}» выполнен.
+@msg	Ran script {name} ({_1} commands)	Сценарий {name} выполнен (команд: {_1})
+@msg	Script {name} failed: {error}	Сценарий {name} завершился с ошибкой: {error}
+	Open Scripts Folder	Открыть папку сценариев
+	Clear Recent Scripts	Очистить недавние сценарии
+@msg	there is no Scripts folder here	здесь нет папки сценариев
 	Ruler Origin	Начало координат линеек
 	Reset Ruler Origin	Сбросить начало координат линеек
 	Artistic	Художественные

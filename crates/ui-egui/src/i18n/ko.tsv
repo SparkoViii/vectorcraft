@@ -93,6 +93,10 @@
 	Package…	패키지…
 	Scripts	스크립트
 	Other Script…	다른 스크립트…
+	Open Scripts Folder	스크립트 폴더 열기
+	Clear Recent Scripts	최근 스크립트 목록 지우기
+	Script “{name}” failed.	스크립트 “{name}” 실패.
+	Script “{name}” finished.	스크립트 “{name}” 완료.
 	Document Setup…	문서 설정…
 	Document Color Mode	문서 색상 모드
 	CMYK Color	CMYK 색상
@@ -4225,6 +4229,9 @@ lighting	Light	광원
 @msg	the compressed file unpacks to more than VectorCraft reads ({_1} MB of document, {_2} MB per image)	압축된 파일의 압축을 풀면 VectorCraft가 읽을 수 있는 한도를 넘습니다(문서 {_1}MB, 이미지당 {_2}MB)
 @msg	the document is too large to save compressed ({0}): save it with Use Compression off	문서가 너무 커서 압축 저장할 수 없습니다({0}): 압축 사용을 끄고 저장하세요
 @msg	the file stopped being read (please report this bug)	파일 읽기가 중단되었습니다(이 버그를 신고해 주세요)
+@msg	Ran script {name} ({_1} commands)	스크립트 {name} 실행됨(명령 {_1}개)
+@msg	Script {name} failed: {error}	스크립트 {name} 실패: {error}
+@msg	there is no Scripts folder here	여기에는 스크립트 폴더가 없습니다
 	Concentric Dividers:	동심원 구분선:
 	Radial Dividers:	방사형 구분선:
 # Grid tool options (the Rectangular Grid and Polar Grid click dialogs).

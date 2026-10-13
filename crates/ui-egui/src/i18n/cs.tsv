@@ -783,6 +783,10 @@ lighting	Light	Světlo
 	Sumi-e…	Sumi-e…
 	Vertical Guide	Svislé vodítko
 	Horizontal Guide	Vodorovné vodítko
+	Script “{name}” failed.	Skript „{name}“ selhal.
+	Script “{name}” finished.	Skript „{name}“ doběhl.
+	Open Scripts Folder	Otevřít složku skriptů
+	Clear Recent Scripts	Vymazat nedávné skripty
 
 # Menu, command and shell labels
 	Align center	Zarovnat na střed
@@ -4377,6 +4381,9 @@ imageTrace	Outline	Obrys
 @msg	missing panel layout	chybí rozložení panelů
 @msg	unsupported native docking operation	nepodporovaná nativní operace ukotvení
 @msg	this kind of brush has no options dialog yet	tento druh štětce zatím nemá dialogové okno možností
+@msg	Ran script {name} ({_1} commands)	Skript {name} proběhl (příkazů: {_1})
+@msg	Script {name} failed: {error}	Skript {name} selhal: {error}
+@msg	there is no Scripts folder here	zde není žádná složka skriptů
 	Ruler Origin	Počátek pravítek
 	Reset Ruler Origin	Obnovit počátek pravítek
 	Column Width:	Šířka sloupce:

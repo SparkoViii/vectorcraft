@@ -107,6 +107,12 @@ pub fn templates_folder(prefs: &Prefs) -> Option<String> {
     Some(documents_folder()?.join("VectorCraft Templates").to_string_lossy().to_string())
 }
 
+/// The Scripts folder File › Scripts lists: `VectorCraft Scripts` in the user's documents folder
+/// (none where there is no home folder, as on the web).
+pub fn scripts_folder() -> Option<String> {
+    Some(documents_folder()?.join("VectorCraft Scripts").to_string_lossy().to_string())
+}
+
 /// The Templates folder for a file dialog to start in (#703): made when it's missing; where it
 /// can't be, the nearest folder above it that exists, else the home folder. A dialog asked to
 /// start in a folder that isn't there shows an error on some desktops.

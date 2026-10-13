@@ -2867,6 +2867,10 @@ lighting	Light	Luz
 	Sumi-e…	Sumi-e…
 	Vertical Guide	Guia vertical
 	Horizontal Guide	Guia horizontal
+	Script “{name}” failed.	O script “{name}” falhou.
+	Script “{name}” finished.	O script “{name}” terminou.
+	Open Scripts Folder	Abrir pasta de scripts
+	Clear Recent Scripts	Limpar scripts recentes
 	All Scripts	Todos os scripts
 	Anchors:	Âncoras:
 	Any Kind	Qualquer tipo

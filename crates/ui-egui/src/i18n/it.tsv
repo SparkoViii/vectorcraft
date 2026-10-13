@@ -4253,6 +4253,13 @@ lighting	Light	Luce
 @msg	unsupported native docking operation	Operazione nativa di ancoraggio non supportata
 	Linux Display Server	Server di visualizzazione Linux
 	X11 (XWayland)	X11 (XWayland)
+	Script “{name}” failed.	Lo script «{name}» non è riuscito.
+	Script “{name}” finished.	Lo script «{name}» è terminato.
+@msg	Ran script {name} ({_1} commands)	Script {name} eseguito ({_1} comandi)
+@msg	Script {name} failed: {error}	Lo script {name} non è riuscito: {error}
+	Open Scripts Folder	Apri cartella degli script
+	Clear Recent Scripts	Cancella script recenti
+@msg	there is no Scripts folder here	qui non c’è una cartella degli script
 	Ruler Origin	Origine dei righelli
 	Reset Ruler Origin	Ripristina origine dei righelli
 	Artistic	Artistico

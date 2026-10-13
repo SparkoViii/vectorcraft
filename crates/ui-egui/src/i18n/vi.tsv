@@ -4297,3 +4297,10 @@ theme	Appearance	Giao diện
 @msg	{tool} isn't in a toolbar group of several tools	{tool} không nằm trong nhóm thanh công cụ có nhiều công cụ
 	Load EPS into Clipboard	Tải EPS vào bảng tạm
 @msg	an image of {w} × {h} pixels is too large to draw	ảnh {w} × {h} điểm ảnh quá lớn nên không thể vẽ
+	Open Scripts Folder	Mở thư mục script
+	Clear Recent Scripts	Xóa script gần đây
+	Script “{name}” failed.	Script “{name}” thất bại.
+	Script “{name}” finished.	Script “{name}” đã hoàn tất.
+@msg	Ran script {name} ({_1} commands)	Đã chạy script {name} ({_1} lệnh)
+@msg	Script {name} failed: {error}	Script {name} thất bại: {error}
+@msg	there is no Scripts folder here	không có thư mục script ở đây

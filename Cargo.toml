@@ -37,6 +37,7 @@ vectorcraft-eps = { path = "crates/eps" }
 vectorcraft-metafile = { path = "crates/metafile" }
 vectorcraft-plugins = { path = "crates/plugins" }
 vectorcraft-affinity = { path = "crates/affinity" }
+vectorcraft-script = { path = "crates/script" }
 vectorcraft-scriptcheck = { path = "crates/scriptcheck" }
 
 # foundation
@@ -56,6 +57,11 @@ socket2 = "0.6"
 wasmi = { version = "2.0.0", default-features = false, features = ["std", "validate", "stable", "portable-dispatch"] }
 # Tests: WebAssembly text -> binary for the plug-in fixtures (Apache-2.0 WITH LLVM-exception).
 wat = "1.228"
+# JavaScript scripts (File › Scripts, vectorcraft-cli script): a pure-Rust engine (MIT OR Unlicense)
+# that builds for wasm32. Without Temporal and Intl (size); with the legacy web features browsers
+# have (`annex-b`: substr, escape, __proto__…), which real scripts use; `fuzz` only adds the total
+# instruction budget scripts run under (see crates/script).
+boa_engine = { version = "0.22.0", default-features = false, features = ["annex-b", "float16", "xsum", "fuzz"] }
 
 # rendering / formats
 vello_cpu = { version = "0.2", features = ["f32_pipeline"] }

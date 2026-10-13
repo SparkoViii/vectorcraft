@@ -1,2 +1,8 @@
 [alias]
 xtask = "run --package xtask --"
+
+# The web app's stack (wasm's default is 1 MiB, which a script nested about 36 levels deep
+# overflows): Boa's parser and some built-ins recurse once per level of nesting
+# (crates/script/src/scan.rs). 32 MiB, reserved in the module's memory.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=-zstack-size=33554432"]

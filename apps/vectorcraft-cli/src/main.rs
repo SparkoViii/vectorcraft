@@ -3,6 +3,7 @@
 //! ```text
 //! vectorcraft-cli mcp [--connect 127.0.0.1:7979 | --headless] [--automation-read-root DIR] [--automation-write-root DIR]
 //! vectorcraft-cli run [--in FILE] [--cmd id [--params '{json}']]... [--export out.svg]... [--scale 2]
+//! vectorcraft-cli script FILE.js [DOCUMENT] [--out FILE]... [--arg KEY=VALUE]... [--automation-read-root DIR] [--automation-write-root DIR]
 //! vectorcraft-cli commands
 //! vectorcraft-cli convert IN OUT [--scale 2] [--artboard 0 | --range 1-3,5] [--outline-text] [--decimals N] [--replace-lossy] [--editing-data]
 //! vectorcraft-cli info FILE
@@ -81,6 +82,13 @@ USAGE:
       order, export each FILE in the format its extension picks (see Writable formats). Prints one
       JSON result per step.
 
+  vectorcraft-cli script FILE.js [DOCUMENT] [--out FILE]... [--arg KEY=VALUE]...
+                         [--automation-read-root DIR] [--automation-write-root DIR]
+      Run a JavaScript file over the commands (docs/scripting.md) on DOCUMENT (any readable
+      format) or a new document, then export each --out FILE. vc.args holds the --arg pairs.
+      Prints alerts and the script's value on stdout, vc.log lines on stderr; on an error,
+      FILE.js:LINE:COL: message and exit code 1 (nothing is exported).
+
   vectorcraft-cli commands
       Print the command catalogue as JSON.
 
@@ -129,6 +137,7 @@ fn main() -> ExitCode {
     let r = match args.first().map(String::as_str) {
         Some("mcp") => mcp(&args[1..]),
         Some("run") => run(&args[1..]),
+        Some("script") => script(&args[1..]),
         Some("commands") => commands(),
         Some("convert") => convert(&args[1..]),
         Some("info") => info(&args[1..]),
@@ -352,6 +361,63 @@ fn run(args: &[String]) -> Result<(), String> {
             }
         };
         results.push(r);
+    }
+    Ok(())
+}
+
+fn script(args: &[String]) -> Result<(), String> {
+    let (mut file, mut document) = (None::<String>, None::<String>);
+    let mut outs = vec![];
+    let mut opts = vectorcraft_script::ScriptOptions::default();
+    let (mut read_root, mut write_root): (Option<String>, Option<String>) = (None, None);
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--out" | "-o" => outs.push(it.next().cloned().ok_or("--out needs a file")?),
+            "--arg" => {
+                let pair = it.next().ok_or("--arg needs KEY=VALUE")?;
+                let (k, v) = pair.split_once('=').ok_or_else(|| format!("--arg {pair}: expected KEY=VALUE"))?;
+                opts.args.insert(k.to_string(), Value::String(v.to_string()));
+            }
+            "--automation-read-root" => read_root = Some(it.next().cloned().ok_or("--automation-read-root needs a folder")?),
+            "--automation-write-root" => write_root = Some(it.next().cloned().ok_or("--automation-write-root needs a folder")?),
+            f if f.starts_with("--") => return Err(format!("unknown script option `{f}`")),
+            f if file.is_none() => file = Some(f.to_string()),
+            f if document.is_none() => document = Some(f.to_string()),
+            f => return Err(format!("script takes one FILE.js and one DOCUMENT, not also `{f}`")),
+        }
+    }
+    let file = file.ok_or("script needs a FILE.js")?;
+    let bytes = std::fs::read(&file).map_err(|e| format!("{file}: {e}"))?;
+    let source = vectorcraft_script::read_source(&bytes).map_err(|e| format!("{file}: {e}"))?;
+    if let Some(roots) = AutomationRoots::new(read_root.as_deref().map(Path::new), write_root.as_deref().map(Path::new))? {
+        file_access::confine_process(roots);
+    }
+    let mut h = Headless::new();
+    match &document {
+        Some(path) => {
+            h.call("app.open", json!({"path": path})).map_err(|e| format!("open {path}: {e}"))?;
+        }
+        None => h.ensure_document(),
+    }
+    let name = Path::new(&file).file_name().map_or_else(|| file.clone(), |n| n.to_string_lossy().to_string());
+    let out = vectorcraft_script::run_script(&mut h.session, &source, &name, &opts).map_err(|e| {
+        for line in &e.log {
+            eprintln!("{line}");
+        }
+        e.to_string()
+    })?;
+    for line in &out.log {
+        eprintln!("{line}");
+    }
+    for a in &out.alerts {
+        outln!("{a}");
+    }
+    if !out.value.is_null() {
+        outln!("{}", out.value);
+    }
+    for path in outs {
+        h.call("app.export", json!({"path": path, "scale": 1.0})).map_err(|e| format!("export {path}: {e}"))?;
     }
     Ok(())
 }

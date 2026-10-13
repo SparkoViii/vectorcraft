@@ -4588,3 +4588,10 @@ mark-style	Japanese	Japońskie
 @msg	unknown parameter `{key}`; the command takes: {keys}	nieznany parametr `{key}`; polecenie przyjmuje: {keys}
 	Load EPS into Clipboard	Wczytaj EPS do schowka
 @msg	an image of {w} × {h} pixels is too large to draw	obraz o wymiarach {w} × {h} pikseli jest zbyt duży, aby go narysować
+	Open Scripts Folder	Otwórz folder skryptów
+	Clear Recent Scripts	Wyczyść listę ostatnich skryptów
+	Script “{name}” failed.	Skrypt „{name}” zakończył się błędem.
+	Script “{name}” finished.	Skrypt „{name}” zakończył działanie.
+@msg	Ran script {name} ({_1} commands)	Uruchomiono skrypt {name} (poleceń: {_1})
+@msg	Script {name} failed: {error}	Skrypt {name} zakończył się błędem: {error}
+@msg	there is no Scripts folder here	nie ma tu folderu skryptów

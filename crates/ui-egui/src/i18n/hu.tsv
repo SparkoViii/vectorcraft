@@ -2363,6 +2363,10 @@
 	Other Libraries	Más könyvtárak
 	Other Library…	Másik könyvtár…
 	Other Script…	Másik szkript…
+	Open Scripts Folder	Szkriptek mappájának megnyitása
+	Clear Recent Scripts	Legutóbbi szkriptek listájának törlése
+	Script “{name}” failed.	A(z) „{name}” szkript futása sikertelen.
+	Script “{name}” finished.	A(z) „{name}” szkript lefutott.
 	Out of Gamut Warning	Színtartományon kívüli szín figyelmeztetés
 	Out of Web Color Warning	Nem webbiztos szín figyelmeztetés
 	Out Tangent Handles	Kimenő érintőfogantyúk
@@ -4656,6 +4660,9 @@ imageTrace	Outline	Körvonal
 @msg	{path}: {e}	{path}: {e}
 @msg	{status} ({e})	{status} ({e})
 @msg	{tool} isn't in a toolbar group of several tools	az eszköz nincs többeszközös eszköztár-csoportban: {tool}
+@msg	Ran script {name} ({_1} commands)	Lefutott szkript: {name} ({_1} parancs)
+@msg	Script {name} failed: {error}	sikertelen szkript: {name}: {error}
+@msg	there is no Scripts folder here	itt nincs Szkriptek mappa
 @msg	the compressed file unpacks to more than VectorCraft reads ({_1} MB of document, {_2} MB per image)	a tömörített fájl kicsomagolva nagyobb lenne, mint amennyit a VectorCraft beolvas ({_1} MB dokumentum, képenként {_2} MB)
 @msg	the document is too large to save compressed ({0}): save it with Use Compression off	a dokumentum túl nagy a tömörített mentéshez ({0}): mentsd a Tömörítés használata beállítás kikapcsolásával
 @msg	the file stopped being read (please report this bug)	a fájl beolvasása megszakadt (kérjük, jelentsd ezt a hibát)

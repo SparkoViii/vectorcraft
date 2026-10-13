@@ -45,6 +45,8 @@ struct Host {
     runner: eframe::WebRunner,
     inbox: Inbox,
     place_inbox: PlaceInbox,
+    /// Scripts picked with File › Scripts › Other Script…, run as they arrive.
+    script_inbox: Inbox,
     drag: DragPos,
     pasted: Rc<RefCell<Pasted>>,
     /// The page's Web Locks for Data Recovery, started once before the first frame: a graphics
@@ -71,6 +73,7 @@ pub fn start() {
             runner: eframe::WebRunner::new(),
             inbox: Arc::default(),
             place_inbox: Arc::default(),
+            script_inbox: Arc::default(),
             drag: DragPos::default(),
             pasted: Rc::default(),
             locks,
@@ -111,7 +114,7 @@ async fn run(host: Host, canvas: web_sys::HtmlCanvasElement, moving: Option<Movi
                     rs.device.set_device_lost_callback(move |reason, msg| loss.report(&ctx, format!("{reason:?}: {msg}")));
                 }
                 host.pasted.borrow_mut().ctx = Some(ctx.clone());
-                let services = services(host.inbox.clone(), host.place_inbox.clone(), ctx.clone(), host.locks.clone());
+                let services = services(host.inbox.clone(), host.place_inbox.clone(), host.script_inbox.clone(), ctx.clone(), host.locks.clone());
                 let app = match taken.borrow_mut().take() {
                     Some(mut app) => {
                         // The old services asked the old context for frames.
@@ -393,7 +396,7 @@ impl eframe::App for WebShell {
     }
 }
 
-fn services(inbox: Inbox, place_inbox: PlaceInbox, ctx: egui::Context, locks: Option<WebLocks>) -> Services {
+fn services(inbox: Inbox, place_inbox: PlaceInbox, script_inbox: Inbox, ctx: egui::Context, locks: Option<WebLocks>) -> Services {
     let open_inbox = inbox.clone();
     let picked = place_inbox.clone();
     let place_ctx = ctx.clone();
@@ -419,6 +422,25 @@ fn services(inbox: Inbox, place_inbox: PlaceInbox, ctx: egui::Context, locks: Op
             });
         })),
         place_inbox: Some(place_inbox),
+        // File › Scripts › Other Script…: the picked script runs when it arrives.
+        script_async: Some(Box::new({
+            let inbox = script_inbox.clone();
+            let ctx = ctx.clone();
+            move || {
+                let inbox = inbox.clone();
+                let ctx = ctx.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let dialog = rfd::AsyncFileDialog::new().set_title("Run Script").add_filter("JavaScript", vectorcraft_ui_egui::scripts::EXTS);
+                    let Some(file) = dialog.pick_file().await else {
+                        return;
+                    };
+                    let bytes = file.read().await;
+                    inbox.lock().unwrap_or_else(|e| e.into_inner()).push((file.file_name(), bytes));
+                    ctx.request_repaint();
+                });
+            }
+        })),
+        script_inbox: Some(script_inbox),
         open_async: Some(Box::new(move || {
             let inbox = open_inbox.clone();
             let ctx = ctx.clone();
