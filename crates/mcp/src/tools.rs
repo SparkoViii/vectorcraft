@@ -474,13 +474,18 @@ fn exec(b: &mut dyn Backend, cmd: &str, params: Value) -> Result<Value, String> 
     b.call("engine.execute", json!({"command": cmd, "params": params}))
 }
 
-fn need_ui(b: &dyn Backend, tool: &str) -> Result<(), String> {
+fn need_ui(b: &mut dyn Backend, tool: &str) -> Result<(), String> {
+    // Look for the app first: without --connect or --headless the server follows one that starts
+    // later in the session, so the answer must come from a live routing, not the last call's.
+    b.refresh();
     if b.has_ui() {
         Ok(())
+    } else if let Some(why) = b.ui_holdup() {
+        Err(format!("`{tool}` needs the desktop app: {why}"))
     } else {
-        Err(format!(
-            "`{tool}` needs the desktop app: run `vectorcraft --control 7979` and start the server with `vectorcraft-cli mcp --connect 127.0.0.1:7979`"
-        ))
+        // Without --connect or --headless the server uses an app as soon as one is running, so
+        // starting it is the whole fix; only a pinned mode needs a change.
+        Err(format!("`{tool}` needs the desktop app: start `vectorcraft --control 7979` (this server uses it as soon as it runs)"))
     }
 }
 

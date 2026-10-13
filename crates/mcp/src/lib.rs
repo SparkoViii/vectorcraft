@@ -10,6 +10,9 @@
 //! - [`Headless`] hosts an in-process [`vectorcraft_engine::Session`] and implements the same
 //!   control-channel method names itself (rendering screenshots with `vectorcraft-render`), so agents
 //!   can draw and look at the result without a window.
+//! - [`Auto`] is the server without a mode flag: it sends each call to [`Remote`] while an app
+//!   answers and to an in-process [`Headless`] session while none does, so an app opened after the
+//!   session started is used as well.
 //!
 //! Entry points: [`Server::serve`] (stdio loop) and [`Server::handle_line`] (one message).
 #![forbid(unsafe_code)]
@@ -22,7 +25,7 @@ mod resources;
 mod server;
 mod tools;
 
-pub use backend::{Backend, Remote};
+pub use backend::{Auto, Backend, Remote};
 pub use headless::Headless;
 pub use prompts::{PROMPTS, PromptArg, PromptDef};
 pub use resources::{DOC_JSON_URI, DOC_URI, TEMPLATES};
@@ -34,6 +37,8 @@ pub const DEFAULT_ADDR: &str = "127.0.0.1:7979";
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_auto;
 #[cfg(test)]
 mod tests_conventions;
 #[cfg(test)]

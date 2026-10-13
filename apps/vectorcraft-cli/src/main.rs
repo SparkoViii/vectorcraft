@@ -52,7 +52,7 @@ mod system_fonts;
 
 use serde_json::{Value, json};
 use vectorcraft_engine::file_access::{self, AutomationRoots};
-use vectorcraft_mcp::{Backend, DEFAULT_ADDR, Headless, Remote, Server};
+use vectorcraft_mcp::{Auto, Backend, DEFAULT_ADDR, Headless, Remote, Server};
 
 /// stdout went away. A reader that stopped early (a closed pipe) ends the program quietly, as
 /// ripgrep does; any other write error is reported.
@@ -69,8 +69,9 @@ vectorcraft-cli — VectorCraft automation
 
 USAGE:
   vectorcraft-cli mcp [--connect ADDR | --headless] [--automation-read-root DIR] [--automation-write-root DIR]
-      Run the MCP server on stdio. Default: connect to a running app at 127.0.0.1:7979
-      (vectorcraft --control 7979), falling back to a headless in-process session.
+      Run the MCP server on stdio. Default: use a running app at 127.0.0.1:7979
+      (vectorcraft --control 7979) whenever one is there, falling back to a headless in-process
+      session while it isn't — an app opened later in the session is used too.
       --automation-read-root / --automation-write-root confine the files the agent's commands read
       (open, place, relink, library loads…) and write (save, export, package, library saves…) to
       DIR, links followed; a root left out grants none of its access. They imply --headless: a
@@ -197,10 +198,10 @@ fn mcp(args: &[String]) -> Result<(), String> {
         // Explicit address: fail loudly if the app isn't there.
         Box::new(Remote::connect(&addr).map_err(|e| format!("cannot connect to {addr}: {e}"))?)
     } else {
-        match Remote::connect(DEFAULT_ADDR) {
-            Ok(r) => Box::new(r),
-            Err(_) => Box::new(Headless::with_document()),
-        }
+        // No mode asked for: use the app when one answers and an in-process headless session
+        // otherwise, either way from the start of the session to its end. A client that starts the
+        // server before the user opens VectorCraft must still reach that app (#1470).
+        Box::new(Auto::new(DEFAULT_ADDR))
     };
     eprintln!("vectorcraft-cli: MCP server on stdio ({})", backend.describe());
     // The binary owns the logger, not the library: installing one here keeps an embedder that

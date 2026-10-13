@@ -11,7 +11,16 @@ It has two backends:
 | **Remote** | `vectorcraft-cli mcp --connect 127.0.0.1:7979` (the app must run with `vectorcraft --control 7979`) | Everything. Tool calls are forwarded over the [control protocol](control-protocol.md), so you watch the app change live. |
 | **Headless** | `vectorcraft-cli mcp --headless` | An in-process engine session with a CPU renderer. Everything except the UI-only tools (`inspect_ui`, `type_text`, `open_panel`, `screenshot {window:true}`). |
 
-With no flag, the server tries `127.0.0.1:7979` and falls back to headless. Logs go to stderr; stdout carries
+With no flag, the server uses both sides but never swaps a working session mid-way: every
+call goes to an app running at `127.0.0.1:7979` (`vectorcraft --control 7979`) whenever one
+answers and the in-process headless session holds no unsaved edits — including an app opened
+after the session started — and to the headless session otherwise. A headless session with
+unsaved edits stays put however long an app runs (UI-only tools then error naming
+`--connect <addr>`); an app that goes away errors instead of falling back to a fresh headless
+document, and is retried on later calls. `--connect` is the mode that pins an
+app (it stops with an error when that app isn't running yet, since you asked for it explicitly), and
+`--headless` the one that never leaves the process. Each switch of backend is a log record, which a
+client that sent `logging/setLevel` receives as a `notifications/message`. Logs go to stderr; stdout carries
 only protocol messages.
 
 ## Build and register
