@@ -991,12 +991,19 @@ impl VectorcraftApp {
     fn logic_frame(&mut self, ctx: &egui::Context) {
         let lang = self.ui_language();
         i18n::set_current(lang);
+        // Han ideographs follow the interface language: Simplified and Traditional Chinese share
+        // their code points and differ only in the glyph forms, so the language - not the character -
+        // has to pick the face, and a Japanese interface keeps the Japanese kanji forms.
+        let cjk = vectorcraft_text::CjkPreference::for_language(lang.code());
         // The engine gives new type the Japanese defaults while the UI is in Japanese.
         if self.session.ui_language.as_deref() != Some(lang.code()) {
             self.session.ui_language = Some(lang.code().to_string());
+            vectorcraft_text::FontDb::global().set_cjk_preference(cjk);
         }
         self.adopt_context(ctx);
         if !self.styled {
+            // The first frame installs the fonts; the same language drives their Han fallbacks.
+            vectorcraft_text::FontDb::global().set_cjk_preference(cjk);
             theme::install_fonts(ctx);
             theme::apply(ctx, self.ui.brightness);
             egui_extras::install_image_loaders(ctx);

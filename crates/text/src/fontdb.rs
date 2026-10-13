@@ -343,6 +343,8 @@ pub struct FontDb {
     /// [`FontDb::family_list`], built on demand and dropped when fonts are added or rescanned.
     family_cache: Mutex<Option<Arc<[String]>>>,
     menu_cache: Mutex<Option<MenuFamilies>>,
+    /// Which script's Han ideographs the interface asked for (see [`FontDb::set_cjk_preference`]).
+    cjk: RwLock<CjkPreference>,
     generation: AtomicU64,
     /// System fallback state: characters no system font covers.
     #[cfg(not(target_arch = "wasm32"))]
@@ -410,15 +412,96 @@ pub const THAI_FAMILIES: &[&str] = &[
     "Garuda",
 ];
 
+/// Which script's Han ideographs the interface asked for. Simplified and Traditional Chinese share
+/// nearly all of their code points and differ only in the glyph forms, so coverage cannot tell them
+/// apart - the interface language has to, and a Japanese interface's kanji must not come from a
+/// Chinese face.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CjkPreference {
+    /// Simplified Chinese: also what a language that does not choose gets, because that is the
+    /// order this fallback had before the choice existed.
+    #[default]
+    SimplifiedChinese,
+    TraditionalChinese,
+    Japanese,
+}
+
+impl CjkPreference {
+    /// The preference for a resolved interface language code (`zh-hans`, `zh-hant`, `zh-TW`, `ja`,
+    /// `en`...). A bare `zh` is Simplified, as in the interface's own language resolution.
+    pub fn for_language(code: &str) -> Self {
+        let tag = code.trim().to_ascii_lowercase();
+        if tag.starts_with("zh") {
+            if asks_traditional_chinese(&tag) { Self::TraditionalChinese } else { Self::SimplifiedChinese }
+        } else if tag.starts_with("ja") {
+            Self::Japanese
+        } else {
+            Self::SimplifiedChinese
+        }
+    }
+
+    /// The Han families to try first for this preference.
+    fn families(self) -> &'static [&'static str] {
+        match self {
+            Self::SimplifiedChinese => HAN_SIMPLIFIED_FAMILIES,
+            Self::TraditionalChinese => HAN_TRADITIONAL_FAMILIES,
+            Self::Japanese => HAN_JAPANESE_FAMILIES,
+        }
+    }
+}
+
+/// Han ideograph families for Simplified Chinese, in the order the platforms' own fallback tables
+/// prefer them (macOS, Windows, then the Linux/Noto names). Missing ones cost one lookup each.
+const HAN_SIMPLIFIED_FAMILIES: &[&str] = &[
+    "PingFang SC",
+    "Heiti SC",
+    "STHeiti",
+    "Microsoft YaHei",
+    "SimSun",
+    "Hiragino Sans GB",
+    "Noto Sans CJK SC",
+    "Noto Sans SC",
+    "Source Han Sans SC",
+    "WenQuanYi Micro Hei",
+];
+/// The same for Traditional Chinese. One list per script, because a Simplified face covers the
+/// Traditional glyphs' code points and would otherwise win (`东` against `東`'s neighbours); the
+/// faces here are the Taiwanese and Hong Kong ones, not a Simplified face as a last resort.
+const HAN_TRADITIONAL_FAMILIES: &[&str] =
+    &["PingFang TC", "Heiti TC", "Hiragino Sans CNS", "Microsoft JhengHei", "MingLiU", "Noto Sans CJK TC", "Noto Sans TC", "Source Han Sans TC"];
+/// Japanese faces for kanji, so a Japanese interface keeps the Japanese forms.
+const HAN_JAPANESE_FAMILIES: &[&str] = &[
+    "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN",
+    "Yu Gothic",
+    "Meiryo",
+    "MS Gothic",
+    "Noto Sans CJK JP",
+    "Noto Sans JP",
+    "Source Han Sans JP",
+    "IPAGothic",
+    "TakaoGothic",
+];
+
+/// Whether a CJK tag asks for Traditional Chinese: a `Hant` script, or a Taiwan, Hong Kong or
+/// Macao region (`zh-TW`, `zh_HK`, `zh_MO.UTF-8`). Anything else Chinese - including a bare `zh` -
+/// is Simplified.
+fn asks_traditional_chinese(tag: &str) -> bool {
+    tag.split(['-', '_', '.']).any(|p| matches!(p, "hant" | "tw" | "hk" | "mo"))
+}
+
 /// The families tried first for character `c`, in a script whose text only fonts made for it set
-/// well (Thai, Lao, Khmer, Myanmar); none for other characters.
-fn script_families(c: char) -> &'static [&'static str] {
+/// well (Thai, Lao, Khmer, Myanmar); none for other characters. Han ideographs are shared by
+/// Japanese, Chinese and Korean, so which face draws them follows the interface language rather
+/// than the character (see [`FontDb::set_cjk_preference`]).
+fn script_families(preference: CjkPreference, c: char) -> &'static [&'static str] {
     use unicode_script::{Script, UnicodeScript};
     match c.script() {
         Script::Thai => THAI_FAMILIES,
         Script::Lao => &["Lao UI", "Leelawadee UI", "Lao Sangam MN", "Noto Sans Lao", "Noto Sans Lao UI", "Phetsarath OT"],
         Script::Khmer => &["Khmer UI", "Khmer Sangam MN", "Noto Sans Khmer", "Noto Sans Khmer UI", "Khmer OS"],
         Script::Myanmar => &["Myanmar Text", "Myanmar Sangam MN", "Noto Sans Myanmar", "Noto Sans Myanmar UI", "Padauk"],
+        Script::Han => preference.families(),
         _ => &[],
     }
 }
@@ -1461,6 +1544,7 @@ impl FontDb {
             }
         }
         Self {
+            cjk: RwLock::new(CjkPreference::default()),
             faces: RwLock::new(faces),
             outlines: Mutex::new(HashMap::new()),
             catalog: RwLock::new(Catalog::new()),
@@ -1498,6 +1582,18 @@ impl FontDb {
     pub fn global() -> &'static FontDb {
         static DB: std::sync::OnceLock<FontDb> = std::sync::OnceLock::new();
         DB.get_or_init(|| FontDb::new(FontPaths::System))
+    }
+
+    /// Ask Han ideographs to be drawn with `preference`'s script. The interface calls this with the
+    /// resolved language, on the first frame and again when Preferences changes it; a database that
+    /// is never told keeps the Simplified order (`CjkPreference::default`).
+    pub fn set_cjk_preference(&self, preference: CjkPreference) {
+        *self.cjk.write().unwrap_or_else(|e| e.into_inner()) = preference;
+    }
+
+    /// The Han script in force ([`FontDb::set_cjk_preference`]).
+    pub fn cjk_preference(&self) -> CjkPreference {
+        *self.cjk.read().unwrap_or_else(|e| e.into_inner())
     }
 
     fn read_faces(&self) -> std::sync::RwLockReadGuard<'_, Vec<Arc<FontFace>>> {
@@ -1982,7 +2078,7 @@ impl FontDb {
     pub(crate) fn fallback_for(&self, c: char, exclude: u32) -> Option<Arc<FontFace>> {
         // Thai (Lao, Khmer, Myanmar) takes a font made for it, when one is installed, rather than
         // whichever face covering it happened to load first (a display face, say).
-        let prefer = script_families(c);
+        let prefer = script_families(self.cjk_preference(), c);
         if let Some(f) = self.family_fallback(c, exclude, prefer) {
             return Some(f);
         }
@@ -2248,5 +2344,38 @@ mod race_tests {
         for t in threads {
             assert_eq!(t.join().unwrap().as_deref(), Some("Inter"));
         }
+    }
+
+    #[test]
+    fn han_families_follow_the_interface_language() {
+        // The language code picks the preference: Traditional for a Traditional Chinese interface,
+        // Simplified for any other Chinese one (a bare `zh` included), Japanese for a Japanese one,
+        // and Simplified for a language that does not choose, which is the order this fallback had
+        // before the choice existed.
+        for tag in ["zh-hant", "zh-Hant-TW", "zh_TW", "zh_HK", "zh_MO.UTF-8"] {
+            assert_eq!(CjkPreference::for_language(tag), CjkPreference::TraditionalChinese, "{tag}");
+        }
+        for tag in ["zh-hans", "zh-Hans-CN", "zh_CN.UTF-8", "zh", "zh-SG"] {
+            assert_eq!(CjkPreference::for_language(tag), CjkPreference::SimplifiedChinese, "{tag}");
+        }
+        assert_eq!(CjkPreference::for_language("ja-JP"), CjkPreference::Japanese);
+        for tag in ["en-US", "de", ""] {
+            assert_eq!(CjkPreference::for_language(tag), CjkPreference::SimplifiedChinese, "{tag}");
+        }
+        // The database answers Han characters with the script it was given - the arm the fallback
+        // itself walks, so this fails if the preference stops reaching the lookup.
+        let db = FontDb::with_font_dirs(Vec::new());
+        assert_eq!(script_families(db.cjk_preference(), '中'), HAN_SIMPLIFIED_FAMILIES, "default");
+        db.set_cjk_preference(CjkPreference::TraditionalChinese);
+        assert_eq!(script_families(db.cjk_preference(), '中'), HAN_TRADITIONAL_FAMILIES);
+        db.set_cjk_preference(CjkPreference::Japanese);
+        assert_eq!(script_families(db.cjk_preference(), '中'), HAN_JAPANESE_FAMILIES);
+        // Each list carries its own script's faces and not another's: `PingFang SC` covers every
+        // code point `PingFang TC` does, so a shared list would keep the wrong glyph forms.
+        assert!(HAN_TRADITIONAL_FAMILIES.iter().any(|f| f.contains("PingFang TC")));
+        assert!(!HAN_TRADITIONAL_FAMILIES.iter().any(|f| f.contains("YaHei") || f.ends_with(" SC") || f.contains("WenQuanYi")));
+        assert!(HAN_SIMPLIFIED_FAMILIES.iter().any(|f| f.contains("PingFang SC")));
+        assert!(!HAN_SIMPLIFIED_FAMILIES.iter().any(|f| f.contains("JhengHei") || f.ends_with(" TC")));
+        assert!(!HAN_JAPANESE_FAMILIES.iter().any(|f| f.contains("CJK SC") || f.contains("CJK TC")));
     }
 }
