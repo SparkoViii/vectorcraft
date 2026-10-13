@@ -2,11 +2,11 @@
 //!
 //! Direct Selection: click an anchor to select it (Shift toggles), click a segment to select the
 //! segment independently of its endpoint anchors, drag to move selected anchors (the one pressed on snaps to
-//! anchors, segments and Smart Guides, or with them off Snap to Point; Shift keeps the move at 45°
+//! anchors, segments and Smart Guides, or with them off Snap to Point, unless Cmd/Ctrl is held; Shift keeps the move at 45°
 //! steps; Alt on an anchor or a segment picks the whole path and Alt-drag copies it), drag a
 //! direction handle to
 //! reshape (Shift keeps it at 45° steps round its anchor, Alt moves it alone; smart guides snap
-//! it), marquee to select anchors (Shift-drag toggles them: the selected ones inside are
+//! it, unless Cmd/Ctrl is held), marquee to select anchors (Shift-drag toggles them: the selected ones inside are
 //! deselected, the others selected), drag a corner widget of any path (a star, a pen path) to round its corners
 //! (the selected ones when anchors are selected; Alt-click cycles their kind, double-click opens
 //! the Corners dialog).
@@ -541,7 +541,9 @@ impl Tool for DirectSelectionTool {
                 // The grabbed anchor snaps and the others follow it. Shift keeps the move at its
                 // angle, and the anchor slides along it onto what Smart Guides find there (#886).
                 self.guides.clear();
-                if let Some(snap) = &self.anchor_snap {
+                if !ev.mods.cmd
+                    && let Some(snap) = &self.anchor_snap
+                {
                     let shift = ev.mods.shift.then(|| Leave::segment(cx, grab, true));
                     let (q, guides) = snap.snap_from(cx, grab + (p - start), shift.as_ref());
                     (d, self.guides) = (q - grab, guides);
@@ -584,12 +586,15 @@ impl Tool for DirectSelectionTool {
                 let mut d = move_delta(start, p, ev.mods.shift);
                 self.guides.clear();
                 let snap = if ev.mods.alt { &self.copy_snap } else { &self.anchor_snap };
-                if let (Some(grab), Some(snap)) = (grab, snap) {
-                    let shift = ev.mods.shift.then(|| Leave::segment(cx, grab, true));
-                    let (q, guides) = snap.snap_from(cx, grab + (p - start), shift.as_ref());
-                    (d, self.guides) = (q - grab, guides);
-                } else if let Some(snap) = &self.move_snap {
-                    (d, self.guides) = snap.snap(cx, start, d, ev.mods.alt);
+                // Cmd held suspends snapping (#1745).
+                if !ev.mods.cmd {
+                    if let (Some(grab), Some(snap)) = (grab, snap) {
+                        let shift = ev.mods.shift.then(|| Leave::segment(cx, grab, true));
+                        let (q, guides) = snap.snap_from(cx, grab + (p - start), shift.as_ref());
+                        (d, self.guides) = (q - grab, guides);
+                    } else if let Some(snap) = &self.move_snap {
+                        (d, self.guides) = snap.snap(cx, start, d, ev.mods.alt);
+                    }
                 }
                 out.push(Action::Preview(
                     "object.transform".into(),
@@ -611,7 +616,7 @@ impl Tool for DirectSelectionTool {
                 out
             }
             (PointerKind::Drag, State::Handle { id, si, ai, out }) => {
-                let (q, guides) = self.handle_snap.snap(cx, (id, si, ai), p, ev.mods.shift);
+                let (q, guides) = if ev.mods.cmd && !ev.mods.shift { (p, vec![]) } else { self.handle_snap.snap(cx, (id, si, ai), p, ev.mods.shift) };
                 self.guides = guides;
                 vec![Action::Preview(
                     "path.setHandle".into(),
@@ -1490,6 +1495,36 @@ mod tests {
         assert_eq!(drag(&mut t, &c, (300.0, 300.0), (203.0, 199.0), none).0, json!({"dx": -97.0, "dy": -101.0}));
         let c = ToolContext { smart_guides: false, snap_to_point: false, ..cx(&d, &one, &p) };
         assert_eq!(drag(&mut t, &c, (300.0, 300.0), (201.0, 199.0), none).0, json!({"dx": -99.0, "dy": -101.0}));
+    }
+
+    /// Cmd (Ctrl elsewhere) held during a drag suspends snapping for as long as it is down (#1745):
+    /// the dragged anchor, or the object moved whole, follows the pointer, and snaps again once Cmd
+    /// is let go, the press having been made without it.
+    #[test]
+    fn cmd_held_mid_drag_suspends_snapping() {
+        let (d, _, b) = two_squares();
+        let p = paint();
+        let cmd = Mods { cmd: true, ..Mods::default() };
+        let drag_to = |t: &mut DirectSelectionTool, c: &ToolContext, x: f64, y: f64, m: Mods| {
+            let a = t.pointer(c, &PointerEvent::new(PointerKind::Drag, x, y).with_mods(m));
+            let Some(Action::Preview(_, v)) = a.last() else { panic!("{a:?}") };
+            (v.clone(), t.overlays(c).iter().any(|o| matches!(o, Overlay::Label { .. })))
+        };
+        // B's top-left corner, pressed 1 pt off, near A's bottom-right one.
+        let one = anchors_of(b, &[(0, 0)]);
+        let c = cx(&d, &one, &p);
+        let mut t = DirectSelectionTool::new(false);
+        t.pointer(&c, &PointerEvent::new(PointerKind::Down, 301.0, 301.0));
+        assert_eq!(drag_to(&mut t, &c, 203.0, 199.0, cmd), (json!({"dx": -98.0, "dy": -102.0}), false));
+        assert_eq!(drag_to(&mut t, &c, 203.0, 199.0, Mods::default()), (json!({"dx": -100.0, "dy": -100.0}), true));
+        // B moved whole: its left side lines up with A's right one only without Cmd.
+        let mut whole = Selection::default();
+        whole.set([b]);
+        let c = cx(&d, &whole, &p);
+        let mut t = DirectSelectionTool::new(true);
+        t.pointer(&c, &PointerEvent::new(PointerKind::Down, 350.0, 350.0));
+        assert_eq!(drag_to(&mut t, &c, 253.0, 351.0, cmd).0["matrix"], json!([1.0, 0.0, 0.0, 1.0, -97.0, 1.0]));
+        assert_eq!(drag_to(&mut t, &c, 253.0, 351.0, Mods::default()).0["matrix"], json!([1.0, 0.0, 0.0, 1.0, -100.0, 1.0]));
     }
 
     /// Group Selection (and Direct Selection on a whole path) moves objects snapping as the

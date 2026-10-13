@@ -43,6 +43,7 @@ from G14 and the budget run of G15: **~170–270 h** one agent, ~50–80 h wall 
 
 ## G1 Interaction fidelity
 
+- **Done (#1745):** Cmd (Ctrl on Windows and Linux) held during a Selection or Direct Selection drag suspends snapping for as long as it is down: moved objects, dragged anchors and handles follow the pointer, and snap again once it is let go. Covered by tool tests in `select.rs` and `direct.rs`.
 - **Done:** Artboards menu, trash and Properties delete selected artboards together; selecting all retains artboard 1. Pointer-event regressions cover ordinary artwork, the first-board survivor, Undo/Redo and the single-board guard; broader artboard reports remain open.
 
 - **Done:** Artboard Delete/Backspace delete selected boards, retaining the original first when all are selected. The last board and active drags stay protected; headless shortcut regressions cover artwork, saved state and Undo/Redo.
