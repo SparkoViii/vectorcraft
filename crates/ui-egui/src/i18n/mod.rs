@@ -23,6 +23,13 @@
 //!   message itself stays English (the control channel, MCP and tests read it); `@msg` catalog
 //!   rows hold whole messages or templates such as `Couldn't open {name}: {e}`, and the values in
 //!   the placeholders are translated in turn (the reason after `: {e}` is often a message too).
+//!
+//! # Direction (RTL)
+//! Arabic, Hebrew, Farsi and Urdu are written right-to-left. egui has no BiDi layout, so the
+//! shell decides the layout per screen (see [`direction`]). The i18n module only provides the
+//! helpers: [`direction::is_rtl`], [`direction::layout`], [`direction::current_layout`].
+//! Widgets that want to follow the language use them instead of hard-coding
+//! `Layout::left_to_right` / `Layout::right_to_left`; everything else keeps its LTR layout.
 
 mod catalog;
 
@@ -30,6 +37,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use catalog::Catalog;
+pub mod direction;
 
 /// One supported UI language.
 pub struct LangInfo {
@@ -93,9 +101,27 @@ fn plural_polish(n: u64) -> usize {
     }
 }
 
+/// Arabic (CLDR): 0 → zero, 1 → one, 2 → two, 3–10 → few, 11–99 → many, 100+ → other.
+fn plural_arabic(n: u64) -> usize {
+    match n {
+        0 => 0,
+        1 => 1,
+        2 => 2,
+        3..=10 => 3,
+        11..=99 => 4,
+        _ => 5,
+    }
+}
+
 /// The registry. English first: it is the fallback and the source language.
-pub static LANGUAGES: [LangInfo; 16] = [
+pub static LANGUAGES: [LangInfo; 17] = [
     LangInfo { code: "en", name: "English", source: "", plural: plural_one_other, complete_menus: false, catalog: OnceLock::new() },
+    // Arabic: complete menus and messages, six CLDR plural forms. Product, workspace
+    // and perspective preset names stay English (`KEEPS_MENU_NAMES`). Every `ar-*`
+    // locale resolves here.
+    LangInfo {
+        code: "ar", name: "العربية", source: include_str!("ar.tsv"), plural: plural_arabic, complete_menus: true, catalog: OnceLock::new()
+    },
     // Japanese: the whole interface (every menu string and `tl!` literal) and the status and error
     // messages, keeping the product, workspace and perspective preset names in English (`MENU_KEEP_AS_IS`).
     LangInfo { code: "ja", name: "日本語", source: include_str!("ja.tsv"), plural: plural_none, complete_menus: true, catalog: OnceLock::new() },
