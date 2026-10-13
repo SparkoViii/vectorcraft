@@ -2400,6 +2400,7 @@
 	Save…	保存…
 	Scale	拡大・縮小
 	Scale Corners	角を拡大・縮小
+	Set Length	長さを設定
 	Scale Cursor Proportional to UI	カーソルを UI の拡大率に合わせる
 	Scale Lineweights	線の太さを拡大・縮小
 	Scale Strokes & Effects	線幅と効果を拡大・縮小
@@ -3038,6 +3039,9 @@
 	Number:	数:
 	Longest:	最長:
 	Path:	パス:
+	Length:	長さ:
+	Path Length	パス長
+	Selection has no length to scale	選択範囲には拡大縮小できる長さがありません
 	Largest:	最大:
 	Direction:	方向:
 	Symbolism Tools Options	シンボルツールオプション

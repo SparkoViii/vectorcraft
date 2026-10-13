@@ -1076,6 +1076,9 @@
 	Number:	Количество:
 	Longest:	Самый длинный:
 	Path:	Контур:
+	Length:	Длина:
+	Path Length	Длина контура
+	Selection has no length to scale	В выделении нет длины для масштабирования
 	Largest:	Самое большое:
 	Direction:	Направление:
 	Symbolism Tools Options	Параметры инструментов символов
@@ -2608,6 +2611,7 @@
 	Set Bounds	Задать границы
 	Set Current Layer	Сделать слой текущим
 	Set Keyboard Shortcut	Задать сочетание клавиш
+	Set Length	Задать длину
 	Set Mesh Point Color	Задать цвет точки сетки
 	Set Preference	Задать настройку
 	Set Slice Rectangle	Задать прямоугольник фрагмента
