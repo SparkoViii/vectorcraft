@@ -110,14 +110,19 @@ impl Session {
     /// A press with Cmd held (Ctrl elsewhere) and any other tool than a selection tool: the
     /// selection tool [`Self::lent_tool`] takes the gesture, pressing without Cmd (a plain click,
     /// not Select Behind). The tool lent to stays as it was, unaware, until the release.
-    fn lend_selection_tool(&mut self, ev: &PointerEvent) -> PointerEvent {
+    fn lend_selection_tool(&mut self, ev: &PointerEvent) -> Result<PointerEvent> {
         if ev.kind != PointerKind::Down || !ev.mods.cmd || self.lender.is_some() {
-            return *ev;
+            return Ok(*ev);
         }
-        let Some(id) = self.lent_tool(self.tool.id()) else { return *ev };
+        let Some(id) = self.lent_tool(self.tool.id()) else { return Ok(*ev) };
+        // The Type tool ends its typing session while it is still the active tool, so it starts a
+        // new one afterwards; the lent tool's drag then moves the typed text (#1881).
+        if crate::cmd::typing_in_progress(self) {
+            crate::cmd::settle_interaction(self)?;
+        }
         let lent = self.make_tool(id);
         self.lender = Some(std::mem::replace(&mut self.tool, lent));
-        PointerEvent { mods: Mods { cmd: false, ..ev.mods }, ..*ev }
+        Ok(PointerEvent { mods: Mods { cmd: false, ..ev.mods }, ..*ev })
     }
 
     /// The lent selection tool's gesture is over: the tool it was lent to is back as it was (the
@@ -261,7 +266,7 @@ impl Session {
         if let Some(r) = self.plane_widget_pointer(ev, view) {
             return r;
         }
-        let ev = &self.lend_selection_tool(ev);
+        let ev = &self.lend_selection_tool(ev)?;
         let acts = self.with_tool_cx(view, |t, cx| t.pointer(cx, ev));
         let r = self.take_tool_panic().and_then(|()| {
             // A gesture may change options (Alt-drag sizes a Liquify brush): keep them.
