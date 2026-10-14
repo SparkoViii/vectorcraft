@@ -1,11 +1,13 @@
 //! What renderers keep between frames: decoded images shared by all of them, image mips, symbol
-//! art placed for instances and inline graphics, raster effects made again when what they read
-//! changes, and caches swept by every kind of render.
+//! art placed for instances and inline graphics, stroke outlines, raster effects made again when
+//! what they read changes, and caches swept by every kind of render. Each test holds [`fonts_steady`]:
+//! fonts added while it runs would make its renderers lay type out again.
 
 use vectorcraft_color::{Color, Paint};
 use vectorcraft_doc::{Document, ImageBlob, ImageObject, Node, NodeKind};
 
 use super::*;
+use crate::tests_fontchange::fonts_steady;
 
 /// A `w`×`h` PNG whose pixels depend on `seed` (each test its own image: the store is shared by
 /// the tests running alongside).
@@ -31,6 +33,7 @@ fn doc_with_image(key: &str, bytes: Vec<u8>, w: u32, h: u32) -> Document {
 
 #[test]
 fn renderers_share_one_decode_of_an_image() {
+    let _fonts = fonts_steady();
     let bytes = png(16, 16, 101);
     let a = doc_with_image("img", bytes.clone(), 16, 16);
     // Another document holding the same image under another key (its own copy of the bytes).
@@ -57,6 +60,7 @@ fn renderers_share_one_decode_of_an_image() {
 /// longer drawn are dropped, with the nodes they kept alive.
 #[test]
 fn node_renders_sweep_stale_cache_entries() {
+    let _fonts = fonts_steady();
     let mut d = Document::new(10.0, 10.0);
     let id = d.alloc_id();
     let square = |x: f64| {
@@ -85,6 +89,7 @@ fn node_renders_sweep_stale_cache_entries() {
 /// more than half size from the full pixels as before.
 #[test]
 fn image_mips_are_opt_in_and_change_nothing_off() {
+    let _fonts = fonts_steady();
     let d = doc_with_image("img", png(64, 64, 103), 64, 64);
     let (off, on) = (RenderOptions::default(), RenderOptions { image_mips: true, ..Default::default() });
     let quarter = Affine::scale(0.25);
@@ -135,6 +140,7 @@ fn text_keys(d: &Document) -> Vec<usize> {
 /// rest is laid out again), where emptying the cache when full laid out every object every frame.
 #[test]
 fn type_over_the_text_budget_keeps_its_entries_between_frames() {
+    let _fonts = fonts_steady();
     let d = text_doc(40, "Type");
     let opts = RenderOptions::default();
     let mut r = Renderer::new();
@@ -162,6 +168,7 @@ fn type_over_the_text_budget_keeps_its_entries_between_frames() {
 /// Type no longer drawn leaves the glyph cache after a few frames, and its bytes with it.
 #[test]
 fn swept_type_entries_give_back_their_bytes() {
+    let _fonts = fonts_steady();
     let d = text_doc(12, "Swept");
     let mut r = Renderer::new();
     r.texts = FrameCache::new(lru::TEXT_BUDGET, 0);
@@ -173,6 +180,122 @@ fn swept_type_entries_give_back_their_bytes() {
         r.render(&empty, 10, 10, Affine::IDENTITY, &RenderOptions::default());
     }
     assert_eq!((r.texts.len(), r.texts.bytes()), (0, 0));
+}
+
+/// [`text_doc`] of three type objects reading `word`: one at 80% opacity, one in Multiply and one
+/// with a drop shadow.
+fn faded_text_doc(word: &str) -> Document {
+    let mut d = text_doc(3, word);
+    let ids: Vec<NodeId> = d.layers[0].children().unwrap().iter().map(|n| n.id).collect();
+    d.node_mut(ids[0]).unwrap().opacity = 0.8;
+    d.node_mut(ids[1]).unwrap().blend = vectorcraft_color::BlendMode::Multiply;
+    d.node_mut(ids[2]).unwrap().appearance.effects.push(drop_shadow());
+    d
+}
+
+/// The glyph geometry `r` keeps for each type object of `d`: under its node, or under the art
+/// drawn for it when it has effects.
+fn kept_glyphs(r: &mut Renderer, d: &Document) -> Vec<Option<Arc<TextGeom>>> {
+    let stamp = r.stamp;
+    text_keys(d)
+        .into_iter()
+        .map(|k| {
+            let k = r.fx_arts.get(&k, stamp).map_or(k, |e| Arc::as_ptr(&e.1) as usize);
+            r.texts.get(&k, stamp).map(|(_, g)| g.clone())
+        })
+        .collect()
+}
+
+/// `f`'s result from a run during which the fonts did not change: other tests add fonts, and the
+/// renderer lays all type out again when the fonts change.
+fn fonts_unchanged<T>(mut f: impl FnMut() -> T) -> T {
+    loop {
+        let fonts = vectorcraft_text::FontDb::global().generation();
+        let t = f();
+        if vectorcraft_text::FontDb::global().generation() == fonts {
+            return t;
+        }
+    }
+}
+
+/// Type at 80% opacity, in Multiply and with a drop shadow keeps its glyph geometry between
+/// frames, as opaque type does: the second frame draws the geometry the first laid out. Frames
+/// that snap type to pixels keep none, and neither does type art that the effect-art cache has no
+/// room for.
+#[test]
+fn translucent_blended_and_shadowed_type_keeps_its_glyph_geometry_between_frames() {
+    let d = faded_text_doc("Kept");
+    let opts = RenderOptions::default();
+    let (first, kept, entries, second, again) = fonts_unchanged(|| {
+        let mut r = Renderer::new();
+        let first = r.render(&d, 400, 400, Affine::IDENTITY, &opts).pixels;
+        let (kept, entries) = (kept_glyphs(&mut r, &d), r.texts.len());
+        let second = r.render(&d, 400, 400, Affine::IDENTITY, &opts).pixels;
+        (first, kept, entries, second, kept_glyphs(&mut r, &d))
+    });
+    assert!(kept.iter().all(Option::is_some) && entries == 3, "{entries} entries");
+    assert!(second == first);
+    let same = kept.iter().zip(&again).all(|pair| matches!(pair, (Some(a), Some(b)) if Arc::ptr_eq(a, b)));
+    assert!(same, "the second frame draws the geometry the first laid out");
+    // Type anti-aliasing snaps the glyphs to pixels.
+    let mut r = Renderer::new();
+    r.render(&d, 400, 400, Affine::IDENTITY, &RenderOptions { anti_alias: AntiAlias::Type, ..Default::default() });
+    assert!(r.texts.is_empty());
+    // With no room for effect art, the shadowed type's art is made in every frame.
+    let frames = fonts_unchanged(|| {
+        let mut r = Renderer::new();
+        r.fx_arts = FrameCache::new(0, 0);
+        (0..2).map(|_| (r.render(&d, 400, 400, Affine::IDENTITY, &opts).pixels == first, r.texts.len())).collect::<Vec<_>>()
+    });
+    assert_eq!(frames, [(true, 2), (true, 2)]);
+}
+
+/// Editing the text of type at 80% opacity, in Multiply or with a drop shadow lays it out again:
+/// the next frame draws what a new renderer draws.
+#[test]
+fn edited_translucent_blended_and_shadowed_type_draws_as_new() {
+    for i in 0..3 {
+        let mut d = faded_text_doc("Kept");
+        let id = d.layers[0].children().unwrap()[i].id;
+        let opts = RenderOptions::default();
+        draws_as_new(&mut d, &opts, &opts, |d| {
+            if let Some(NodeKind::Text(t)) = d.node_mut(id).map(|n| &mut n.kind) {
+                t.runs[0].text = "Edit".into();
+            }
+        });
+    }
+}
+
+/// Type showing an inline graphic, at 80% opacity, in Multiply, with a drop shadow and opaque:
+/// when the symbol's art changes size and the document's inline graphics are not resolved again,
+/// the next frame lays the type out with the new size, as a new renderer does.
+#[test]
+fn type_with_an_inline_graphic_draws_its_symbols_new_size() {
+    use vectorcraft_doc::text::{CharStyle, InlineArt, TextObject, TextRun};
+    for i in 0..4 {
+        let mut d = Document::new(200.0, 100.0);
+        let art = symbol_art(&mut d);
+        d.symbols.push(vectorcraft_doc::Symbol { name: "S".into(), art: Arc::new(art) });
+        let style = CharStyle { size: 24.0, ..Default::default() };
+        let mut t = TextObject::point(vectorcraft_geom::Point::new(10.0, 50.0), "A", style.clone());
+        t.runs.push(TextRun::inline(InlineArt::new("S"), style.clone()));
+        t.runs.push(TextRun::new("B", style));
+        let mut n = Node::new(d.alloc_id(), NodeKind::Text(Box::new(t)));
+        match i {
+            0 => n.opacity = 0.8,
+            1 => n.blend = vectorcraft_color::BlendMode::Multiply,
+            2 => n.appearance.effects.push(drop_shadow()),
+            _ => {}
+        }
+        let mut d = with_art(d, vec![n]);
+        d.resolve_inline_art();
+        // `S` becomes a wide red bar: the inline graphic grows, and the type after it moves.
+        edit_draws_as_new(d, |d| {
+            let bar = vectorcraft_geom::shapes::rectangle(Rect::new(-20.0, -4.0, 20.0, 4.0));
+            let red = vectorcraft_doc::Appearance::basic(Paint::solid(Color::rgb(1.0, 0.0, 0.0)), Paint::None, 0.0);
+            d.symbols[0].art = Arc::new(Node::path(d.alloc_id(), bar, red));
+        });
+    }
 }
 
 /// A symbol's art inside the 20 × 20 square around the origin: a group of a square filled blue
@@ -225,6 +348,7 @@ fn placed_copies(r: &Renderer, docs: &[&Document]) -> std::collections::BTreeSet
 /// holds the symbol's art itself only weakly.
 #[test]
 fn symbol_instances_keep_their_placed_art_between_frames() {
+    let _fonts = fonts_steady();
     let d = symbol_doc();
     let opts = RenderOptions::default();
     let mut r = Renderer::new();
@@ -236,11 +360,197 @@ fn symbol_instances_keep_their_placed_art_between_frames() {
     assert_eq!(Arc::strong_count(&d.symbols[0].art), 1, "only the document holds the symbol's art");
 }
 
+/// The stroke outlines and the gradient slices of strokes that `r` keeps and that its last frame made
+/// or used.
+fn stroke_outlines(r: &Renderer) -> (Vec<Arc<BezPath>>, Vec<Slices>) {
+    let outlines = r.strokes.values().filter(|e| e.stamp == r.stamp).map(|e| e.outline.clone()).collect();
+    (outlines, r.stroke_slices.values().filter(|e| e.stamp == r.stamp).map(|e| e.slices.clone()).collect())
+}
+
+/// How many of the outlines and of the slices in `before` (see [`stroke_outlines`]) the last frame of
+/// `r` used again.
+fn used_again(r: &Renderer, before: &(Vec<Arc<BezPath>>, Vec<Slices>)) -> (usize, usize) {
+    fn again<T>(was: &[Arc<T>], now: &[Arc<T>]) -> usize {
+        was.iter().filter(|a| now.iter().any(|b| Arc::ptr_eq(a, b))).count()
+    }
+    let (outlines, slices) = stroke_outlines(r);
+    (again(&before.0, &outlines), again(&before.1, &slices))
+}
+
+/// Copies can share the original's appearance: three copies of [`symbol_art`] made as
+/// `edit.duplicate` makes them, and a wave whose stroke has a gradient along it with a copy made as
+/// the Layers panel's Duplicate Selection makes it. Each object keeps its own stroke outlines and
+/// gradient slices from frame to frame, a copy moved gets new ones while the others keep theirs,
+/// and each frame draws what a new renderer draws.
+#[test]
+fn copies_sharing_an_appearance_keep_their_own_stroke_outlines() {
+    let _fonts = fonts_steady();
+    use vectorcraft_doc::{Appearance, StrokeGradientMode};
+    let mut d = Document::new(200.0, 100.0);
+    let art = symbol_art(&mut d);
+    let l = d.layers[0].id;
+    let mut copies = vec![];
+    for x in [30.0, 80.0, 130.0] {
+        let mut copy = d.reid(&art);
+        copy.transform(Affine::translate((x, 30.0)), true);
+        copies.push(d.insert(Some(l), usize::MAX, copy).unwrap());
+    }
+    let mut st = StrokeLayer::new(Paint::Gradient(Box::new(vectorcraft_color::GradientPaint::new(Default::default()))), 6.0);
+    st.gradient_mode = StrokeGradientMode::Along;
+    let mut wave = BezPath::new();
+    wave.move_to((20.0, 75.0));
+    wave.curve_to((60.0, 55.0), (100.0, 95.0), (180.0, 75.0));
+    let ap = Appearance { items: vec![AppearanceItem::Stroke(st)], ..Default::default() };
+    let wave = Node::path(d.alloc_id(), vectorcraft_geom::PathData::from_bezpath(&wave), ap);
+    let duplicate = d.reid(&wave);
+    d.insert(Some(l), usize::MAX, wave).unwrap();
+    d.insert(Some(l), usize::MAX, duplicate).unwrap();
+    let opts = RenderOptions::default();
+    let frame = |r: &mut Renderer, d: &Document| r.render(d, 200, 100, Affine::IDENTITY, &opts).pixels;
+    let mut r = Renderer::new();
+    frame(&mut r, &d);
+    let before = stroke_outlines(&r);
+    assert_eq!((before.0.len(), before.1.len()), (8, 2), "the strokes of three copies and two waves, and the waves' slices");
+    assert!(frame(&mut r, &d) == frame(&mut Renderer::new(), &d));
+    assert_eq!(used_again(&r, &before), (8, 2), "the second frame draws the outlines the first made");
+    // The first copy moves 5 pt right.
+    if let Some(n) = d.node_mut(copies[0]) {
+        n.transform(Affine::translate((5.0, 0.0)), true);
+    }
+    assert!(frame(&mut r, &d) == frame(&mut Renderer::new(), &d));
+    assert_eq!(used_again(&r, &before), (6, 2), "the other copies and the waves keep theirs");
+}
+
+/// The art placed for unstained symbol instances shares its appearance with the symbol's art (the
+/// first and the third instance of [`symbol_doc`]). Each instance keeps its own stroke outlines from
+/// frame to frame, and the second frame draws what a new renderer draws.
+#[test]
+fn symbol_instances_keep_their_own_stroke_outlines_between_frames() {
+    let _fonts = fonts_steady();
+    let d = symbol_doc();
+    let opts = RenderOptions::default();
+    let frame = |r: &mut Renderer| r.render(&d, 200, 100, Affine::IDENTITY, &opts).pixels;
+    let mut r = Renderer::new();
+    frame(&mut r);
+    let before = stroke_outlines(&r);
+    assert_eq!(before.0.len(), 6, "the square's and the line's strokes of three instances");
+    assert!(frame(&mut r) == frame(&mut Renderer::new()));
+    assert_eq!(used_again(&r, &before), (6, 0), "the second frame draws the outlines the first made");
+}
+
+/// The art of symbol `I` ([`symbol_art`] with an image over it) is placed again in every frame.
+/// The copies placed for its three unstained instances and for an inline graphic at the art's own
+/// size replace each other's stroke outlines: the renderer keeps one outline for each of the art's
+/// two strokes. Two copies of [`symbol_art`] made as `edit.duplicate` makes them and two instances
+/// of symbol `S` ([`symbol_art`]), drawn after those, keep their own outlines. With no room in the
+/// placed-art cache, `S`'s art is placed again in every frame as well, and its copies keep one
+/// outline for each stroke. Each frame draws what a new renderer draws.
+#[test]
+fn art_placed_again_in_every_frame_keeps_one_outline_per_stroke() {
+    let _fonts = fonts_steady();
+    use vectorcraft_doc::text::{CharStyle, InlineArt, TextObject, TextRun};
+    let mut d = Document::new(200.0, 100.0);
+    d.images.insert("dot".into(), ImageBlob::new("image/png", png(4, 4, 108)));
+    let mut art = symbol_art(&mut d);
+    let im = ImageObject { key: "dot".into(), width: 4, height: 4, xf: Affine::translate((-2.0, -2.0)), link: None, placement: Default::default() };
+    let image = Node::new(d.alloc_id(), NodeKind::Image(Box::new(im)));
+    if let Some(c) = art.children_mut() {
+        c.push(Arc::new(image));
+    }
+    d.symbols.push(vectorcraft_doc::Symbol { name: "I".into(), art: Arc::new(art) });
+    let art = symbol_art(&mut d);
+    d.symbols.push(vectorcraft_doc::Symbol { name: "S".into(), art: Arc::new(art) });
+    let l = d.layers[0].id;
+    let instance = |d: &mut Document, symbol: &str, x: f64, y: f64| {
+        let id = d.alloc_id();
+        d.insert(Some(l), usize::MAX, Node::new(id, NodeKind::SymbolInstance { symbol: symbol.into(), xf: Affine::translate((x, y)) })).unwrap();
+    };
+    for x in [25.0, 65.0, 105.0] {
+        instance(&mut d, "I", x, 25.0);
+    }
+    // Type as tall as `I`'s art shows the inline graphic at scale 1.
+    let size = d.symbol_art_bounds("I").map_or(0.0, |b| b.height());
+    let style = CharStyle { size, ..Default::default() };
+    let mut t = TextObject::point(vectorcraft_geom::Point::new(140.0, 32.0), "A", style.clone());
+    t.runs.push(TextRun::inline(InlineArt::new("I"), style));
+    let id = d.alloc_id();
+    d.insert(Some(l), usize::MAX, Node::new(id, NodeKind::Text(Box::new(t)))).unwrap();
+    let art = symbol_art(&mut d);
+    for x in [105.0, 145.0] {
+        let mut copy = d.reid(&art);
+        copy.transform(Affine::translate((x, 72.0)), true);
+        d.insert(Some(l), usize::MAX, copy).unwrap();
+    }
+    for x in [25.0, 65.0] {
+        instance(&mut d, "S", x, 72.0);
+    }
+    let opts = RenderOptions::default();
+    let frame = |r: &mut Renderer| r.render(&d, 200, 100, Affine::IDENTITY, &opts).pixels;
+    let counts = |r: &Renderer| (r.strokes.len(), r.stroke_slices.len());
+    let mut r = Renderer::new();
+    let mut full = Renderer::new();
+    full.placed_arts = FrameCache::new(0, 0);
+    let mut before = (vec![], vec![]);
+    for n in 1..=4 {
+        let want = frame(&mut Renderer::new());
+        assert!(frame(&mut r) == want && frame(&mut full) == want, "frame {n}");
+        // Two outlines for the art placed for `I`, two for each copy and two for each instance of
+        // `S`; with no room in the cache, two for the art placed for `S`.
+        assert_eq!((counts(&r), counts(&full)), ((10, 0), (8, 0)), "frame {n}");
+        if n == 1 {
+            before = stroke_outlines(&r);
+        }
+    }
+    assert_eq!(used_again(&r, &before), (8, 0), "the instances of `S` and the copies keep theirs");
+}
+
+/// The document holds a Grid Repeat of [`symbol_art`] (nine groups) and a group with a Transform
+/// effect around two copies of [`symbol_art`] made as `edit.duplicate` makes them. With no room in
+/// the caches of evaluated live objects and of effect art, the repeat is evaluated again and the
+/// group's art is made again in every frame. Their copies then replace each other's stroke
+/// outlines: the renderer keeps two outlines for the repeat and two for the copies. With room, each
+/// copy keeps its own. Each frame draws what a new renderer draws.
+#[test]
+fn art_evaluated_again_in_every_frame_keeps_one_outline_per_stroke() {
+    let _fonts = fonts_steady();
+    let mut d = Document::new(200.0, 100.0);
+    let l = d.layers[0].id;
+    let mut source = symbol_art(&mut d);
+    source.transform(Affine::translate((20.0, 20.0)), true);
+    let repeat = vectorcraft_doc::pattern::RepeatSpec::grid(vec![Arc::new(source)], 4.0, 4.0);
+    let id = d.alloc_id();
+    d.insert(Some(l), usize::MAX, Node::new(id, NodeKind::Repeat(repeat))).unwrap();
+    let art = symbol_art(&mut d);
+    let mut copies = vec![];
+    for x in [130.0, 170.0] {
+        let mut copy = d.reid(&art);
+        copy.transform(Affine::translate((x, 30.0)), true);
+        copies.push(Arc::new(copy));
+    }
+    let mut moved = Node::group(d.alloc_id(), copies);
+    moved.appearance.effects.push(effect("distort.transform", serde_json::json!({"moveV": 30.0})));
+    d.insert(Some(l), usize::MAX, moved).unwrap();
+    let opts = RenderOptions::default();
+    let frame = |r: &mut Renderer| r.render(&d, 200, 100, Affine::IDENTITY, &opts).pixels;
+    let mut r = Renderer::new();
+    let mut full = Renderer::new();
+    full.live = live::LiveCache::with_budget(0);
+    full.fx_arts = FrameCache::new(0, 0);
+    for n in 1..=4 {
+        let want = frame(&mut Renderer::new());
+        assert!(frame(&mut r) == want && frame(&mut full) == want, "frame {n}");
+        // Two outlines for each of the nine repeated groups and each copy; with no room in the
+        // caches, two for the repeat and two for the copies.
+        assert_eq!((r.strokes.len(), full.strokes.len()), (22, 4), "frame {n}");
+    }
+}
+
 /// Moving an instance places its art again, and editing a symbol's art places the art of its
 /// instances again: the other instances keep theirs, and each frame draws what a new renderer
 /// draws.
 #[test]
 fn editing_an_instance_or_a_symbol_places_only_its_art_again() {
+    let _fonts = fonts_steady();
     let mut d = symbol_doc();
     // Symbol `T` is a green square, and one instance of it stands below the others.
     let green = vectorcraft_doc::Appearance::basic(Paint::solid(Color::rgb(0.0, 1.0, 0.0)), Paint::None, 0.0);
@@ -276,6 +586,40 @@ fn editing_an_instance_or_a_symbol_places_only_its_art_again() {
     assert_eq!(img.pixel(140, 60), [255, 0, 0, 255], "the turned instance's square");
     let edited = placed_copies(&r, &[&unmoved, &d]);
     assert!(moved.is_subset(&edited) && edited.len() == moved.len() + 6, "{} copies, then {}", moved.len(), edited.len());
+}
+
+/// A symbol whose art, kept between frames, lies outside the 20 × 20 square around the origin:
+/// each frame culls the instance by the art the symbol holds then and draws what a new renderer
+/// draws. When the symbol holds earlier art again, the renderer draws the art it placed for it
+/// then.
+#[test]
+fn instances_of_art_outside_the_square_follow_their_symbols_art() {
+    let _fonts = fonts_steady();
+    /// A blue square in a group, 20 × 20 from (x, 0).
+    fn square_at(d: &mut Document, x: f64) -> Arc<Node> {
+        let blue = vectorcraft_doc::Appearance::basic(Paint::solid(Color::rgb(0.0, 0.0, 1.0)), Paint::None, 0.0);
+        let square = Node::path(d.alloc_id(), vectorcraft_geom::shapes::rectangle(Rect::new(x, 0.0, x + 20.0, 20.0)), blue);
+        Arc::new(Node::group(d.alloc_id(), vec![Arc::new(square)]))
+    }
+    let mut d = Document::new(200.0, 100.0);
+    // The instance moves the art by (-160, 40): the square from x 100 lies left of the view, and
+    // the one from x 200 lies from (40, 40) to (60, 60), in it. The 20 × 20 square around the
+    // origin lies from (-170, 30) to (-150, 50), left of the view.
+    let (off, on) = (square_at(&mut d, 100.0), square_at(&mut d, 200.0));
+    d.symbols.push(vectorcraft_doc::Symbol { name: "Far".into(), art: off.clone() });
+    let (l, id) = (d.layers[0].id, d.alloc_id());
+    d.insert(Some(l), 0, Node::new(id, NodeKind::SymbolInstance { symbol: "Far".into(), xf: Affine::translate((-160.0, 40.0)) })).unwrap();
+    let opts = RenderOptions::default();
+    let mut r = Renderer::new();
+    let mut placed = vec![];
+    for art in [&off, &on, &off, &on] {
+        d.symbols[0].art = art.clone();
+        let frame = r.render(&d, 200, 100, Affine::IDENTITY, &opts);
+        assert!(frame.pixels == Renderer::new().render(&d, 200, 100, Affine::IDENTITY, &opts).pixels);
+        assert_eq!(frame.pixel(50, 50) == [0, 0, 255, 255], Arc::ptr_eq(art, &on), "{:?}", frame.pixel(50, 50));
+        placed.push(placed_copies(&r, &[&d]));
+    }
+    assert!(!placed[1].is_empty() && placed[3] == placed[1], "the fourth frame draws the art placed in the second");
 }
 
 /// Draws `d` (200 × 100 points, on white), applies `edit` and draws it again with the same
@@ -315,6 +659,7 @@ fn holder_doc(mut d: Document, members: Vec<Node>) -> Document {
 /// frame draws what a new renderer draws.
 #[test]
 fn art_showing_another_symbol_draws_its_edits() {
+    let _fonts = fonts_steady();
     use vectorcraft_doc::text::{CharStyle, InlineArt, TextObject, TextRun};
     let mut d = Document::new(200.0, 100.0);
     let art = symbol_art(&mut d);
@@ -344,6 +689,7 @@ fn art_showing_another_symbol_draws_its_edits() {
 /// renderer draws.
 #[test]
 fn art_with_raster_effects_draws_pattern_and_resolution_edits() {
+    let _fonts = fonts_steady();
     use vectorcraft_doc::pattern::{PatternDef, pattern_paint};
     let effect = |id: &str, params: serde_json::Value| vectorcraft_doc::Effect { id: id.into(), params, visible: true };
     let mut d = Document::new(200.0, 100.0);
@@ -381,6 +727,7 @@ fn art_with_raster_effects_draws_pattern_and_resolution_edits() {
 /// draws.
 #[test]
 fn art_with_live_objects_draws_pattern_layout_edits() {
+    let _fonts = fonts_steady();
     use vectorcraft_doc::live::EnvelopeOptions;
     use vectorcraft_doc::pattern::{PatternDef, TileType, pattern_paint};
     let mut d = Document::new(200.0, 100.0);
@@ -411,6 +758,124 @@ fn art_with_live_objects_draws_pattern_layout_edits() {
             def.tile_type = TileType::BrickByRow { offset: 0.5 };
         }
     });
+}
+
+/// An envelope of `d` bending `content` with an arc warp (30%); with `patterns`, Distort
+/// Appearance and Distort Pattern Fills are on, and the tiles of its pattern fills bend with it.
+fn arc_envelope(d: &mut Document, content: Vec<Node>, patterns: bool) -> Node {
+    let kind = vectorcraft_doc::EnvelopeKind::Warp { style: "arc".into(), bend: 30.0, h: 0.0, v: 0.0, horizontal: true };
+    let options = vectorcraft_doc::live::EnvelopeOptions { distort_appearance: patterns, distort_pattern_fills: patterns, ..Default::default() };
+    let content = content.into_iter().map(Arc::new).collect();
+    Node::new(
+        d.alloc_id(),
+        NodeKind::Envelope { content, kind: Box::new(kind), fidelity: 50.0, editing: false, options, frame: Box::new(Affine::IDENTITY) },
+    )
+}
+
+/// An envelope that bends the tiles of its pattern fills is evaluated again when a pattern it tiles
+/// changes its tile type or its overlap, as Pattern Options sets them: a band filled with the
+/// pattern, and type whose characters are filled with it.
+#[test]
+fn live_objects_draw_pattern_layout_edits() {
+    let _fonts = fonts_steady();
+    use vectorcraft_doc::pattern::{Overlap, PatternDef, TileType, pattern_paint};
+    use vectorcraft_doc::text::{CharStyle, TextObject};
+    use vectorcraft_geom::shapes::rectangle;
+    let bricks = |d: &mut Document| {
+        if let Some(def) = d.pattern_mut("Checks") {
+            def.tile_type = TileType::BrickByRow { offset: 0.5 };
+        }
+    };
+    let mut d = Document::new(200.0, 100.0);
+    d.patterns.push(checks(Color::rgb(1.0, 0.0, 0.0)));
+    let band = filled(&mut d, rectangle(Rect::new(20.0, 20.0, 180.0, 80.0)), pattern_paint("Checks"), vec![]);
+    let envelope = arc_envelope(&mut d, vec![band], true);
+    edit_draws_as_new(with_art(d, vec![envelope]), bricks);
+    // Pattern `Halves` is a 30 × 10 bar, red on the left and blue on the right, in a 20 × 20 tile:
+    // each tile's bar reaches into the next tile, and the bar drawn in front depends on the overlap.
+    let mut d = Document::new(200.0, 100.0);
+    let half = |x: f64, c: Color| {
+        let paint = vectorcraft_doc::Appearance::basic(Paint::solid(c), Paint::None, 0.0);
+        Arc::new(Node::path(NodeId(900), rectangle(Rect::new(x, 0.0, x + 15.0, 10.0)), paint))
+    };
+    let mut halves = PatternDef::new("Halves", vec![half(0.0, Color::rgb(1.0, 0.0, 0.0)), half(15.0, Color::rgb(0.0, 0.0, 1.0))]);
+    halves.tile = Rect::new(0.0, 0.0, 20.0, 20.0);
+    d.patterns.push(halves);
+    let band = filled(&mut d, rectangle(Rect::new(20.0, 20.0, 180.0, 80.0)), pattern_paint("Halves"), vec![]);
+    let envelope = arc_envelope(&mut d, vec![band], true);
+    edit_draws_as_new(with_art(d, vec![envelope]), |d| {
+        if let Some(def) = d.pattern_mut("Halves") {
+            def.overlap = Overlap { right_in_front: true, bottom_in_front: true };
+        }
+    });
+    // Type whose characters are filled with `Checks`.
+    let mut d = Document::new(200.0, 100.0);
+    d.patterns.push(checks(Color::rgb(1.0, 0.0, 0.0)));
+    let style = CharStyle { size: 90.0, fill: pattern_paint("Checks"), ..Default::default() };
+    let text = Node::new(d.alloc_id(), NodeKind::Text(Box::new(TextObject::point(vectorcraft_geom::Point::new(10.0, 80.0), "HHH", style))));
+    let envelope = arc_envelope(&mut d, vec![text], true);
+    edit_draws_as_new(with_art(d, vec![envelope]), bricks);
+}
+
+/// An envelope is evaluated again when a symbol or a pattern changes that it shows through other
+/// art: a symbol shown in the art of the symbol it bends, a symbol that is the opacity mask of the
+/// object it bends, and, with the tiles of its pattern fills bending with it, a pattern filling
+/// the art of the symbol it bends and a symbol in the art of a pattern it tiles.
+#[test]
+fn live_objects_draw_symbol_and_pattern_art_edits() {
+    let _fonts = fonts_steady();
+    use vectorcraft_doc::pattern::{PatternDef, TileType, pattern_paint};
+    use vectorcraft_geom::shapes::rectangle;
+    // Symbol `S` ([`symbol_art`]) becomes a wide red bar.
+    let with_s = || {
+        let mut d = Document::new(200.0, 100.0);
+        let art = symbol_art(&mut d);
+        d.symbols.push(vectorcraft_doc::Symbol { name: "S".into(), art: Arc::new(art) });
+        d
+    };
+    let red_bar = |d: &mut Document| {
+        let bar = rectangle(Rect::new(-20.0, -4.0, 20.0, 4.0));
+        let red = vectorcraft_doc::Appearance::basic(Paint::solid(Color::rgb(1.0, 0.0, 0.0)), Paint::None, 0.0);
+        let s = d.symbols.iter().position(|s| s.name == "S").unwrap();
+        d.symbols[s].art = Arc::new(Node::path(d.alloc_id(), bar, red));
+    };
+    let instance = |d: &mut Document, symbol: &str, xf: Affine| Node::new(d.alloc_id(), NodeKind::SymbolInstance { symbol: symbol.into(), xf });
+    // An instance of symbol `A`, whose art shows `S`.
+    let mut d = with_s();
+    let shown = instance(&mut d, "S", Affine::IDENTITY);
+    let a = Node::group(d.alloc_id(), vec![Arc::new(shown)]);
+    d.symbols.push(vectorcraft_doc::Symbol { name: "A".into(), art: Arc::new(a) });
+    let a = instance(&mut d, "A", Affine::translate((100.0, 50.0)) * Affine::scale(2.0));
+    let envelope = arc_envelope(&mut d, vec![a], false);
+    edit_draws_as_new(with_art(d, vec![envelope]), red_bar);
+    // A black rectangle whose opacity mask is an instance of `S`.
+    let mut d = with_s();
+    let mask = instance(&mut d, "S", Affine::translate((100.0, 50.0)) * Affine::scale(3.0));
+    let mut masked = filled(&mut d, rectangle(Rect::new(20.0, 20.0, 180.0, 80.0)), Paint::solid(Color::BLACK), vec![]);
+    masked.extras_mut().mask = Some(Box::new(vectorcraft_doc::OpacityMask::new(mask, true)));
+    let envelope = arc_envelope(&mut d, vec![masked], false);
+    edit_draws_as_new(with_art(d, vec![envelope]), red_bar);
+    // An instance of symbol `Banded`, a band filled with `Checks`, whose tile type turns to bricks.
+    let mut d = Document::new(200.0, 100.0);
+    d.patterns.push(checks(Color::rgb(1.0, 0.0, 0.0)));
+    let band = filled(&mut d, rectangle(Rect::new(-80.0, -30.0, 80.0, 30.0)), pattern_paint("Checks"), vec![]);
+    d.symbols.push(vectorcraft_doc::Symbol { name: "Banded".into(), art: Arc::new(band) });
+    let banded = instance(&mut d, "Banded", Affine::translate((100.0, 50.0)));
+    let envelope = arc_envelope(&mut d, vec![banded], true);
+    edit_draws_as_new(with_art(d, vec![envelope]), |d| {
+        if let Some(def) = d.pattern_mut("Checks") {
+            def.tile_type = TileType::BrickByRow { offset: 0.5 };
+        }
+    });
+    // A band filled with pattern `Dots`, whose art is an instance of `S` at half size.
+    let mut d = with_s();
+    let dot = instance(&mut d, "S", Affine::translate((10.0, 10.0)) * Affine::scale(0.5));
+    let mut dots = PatternDef::new("Dots", vec![Arc::new(dot)]);
+    dots.tile = Rect::new(0.0, 0.0, 20.0, 20.0);
+    d.patterns.push(dots);
+    let band = filled(&mut d, rectangle(Rect::new(20.0, 20.0, 180.0, 80.0)), pattern_paint("Dots"), vec![]);
+    let envelope = arc_envelope(&mut d, vec![band], true);
+    edit_draws_as_new(with_art(d, vec![envelope]), red_bar);
 }
 
 fn effect(id: &str, params: serde_json::Value) -> vectorcraft_doc::Effect {
@@ -452,6 +917,7 @@ fn checks(color: Color) -> vectorcraft_doc::pattern::PatternDef {
 /// Pattern Options sets it) under a blur and a drop shadow.
 #[test]
 fn rasters_draw_pattern_edits() {
+    let _fonts = fonts_steady();
     use vectorcraft_doc::pattern::{TileType, pattern_paint};
     use vectorcraft_geom::shapes::rectangle;
     let doc = || {
@@ -480,6 +946,7 @@ fn rasters_draw_pattern_edits() {
 /// file is read again (a blur).
 #[test]
 fn rasters_draw_symbol_brush_and_image_edits() {
+    let _fonts = fonts_steady();
     use vectorcraft_geom::shapes::{line, rectangle};
     // A group of an instance of symbol `A`, whose art shows symbol `S`, and a green square.
     let mut d = Document::new(200.0, 100.0);
@@ -545,6 +1012,7 @@ fn missing_font_type(d: &mut Document, fx: vectorcraft_doc::Effect) -> Node {
 /// Images under an image's blur.
 #[test]
 fn rasters_draw_document_and_layer_setting_edits() {
+    let _fonts = fonts_steady();
     use vectorcraft_geom::shapes::rectangle;
     // The path holds ten bars, 1 pt high and 2 pt apart.
     let mut d = Document::new(200.0, 100.0);
@@ -591,6 +1059,7 @@ fn rasters_draw_document_and_layer_setting_edits() {
 /// blurred group, entered and left.
 #[test]
 fn rasters_follow_the_view_options() {
+    let _fonts = fonts_steady();
     use vectorcraft_doc::text::{CharStyle, TextObject};
     use vectorcraft_geom::shapes::{ellipse, rectangle};
     let on_white = RenderOptions { background: Some([255, 255, 255, 255]), ..Default::default() };
@@ -629,6 +1098,7 @@ fn rasters_follow_the_view_options() {
 /// documents light ones.
 #[test]
 fn filtered_thumbnails_follow_the_color_mode() {
+    let _fonts = fonts_steady();
     use vectorcraft_geom::shapes::rectangle;
     let mut d = Document::new(200.0, 100.0);
     d.color_mode = vectorcraft_doc::ColorMode::Cmyk;
@@ -649,6 +1119,7 @@ fn filtered_thumbnails_follow_the_color_mode() {
 /// cache too small for all of the art. Art no longer drawn leaves the cache after a few frames.
 #[test]
 fn symbol_instances_draw_as_groups_of_their_placed_art() {
+    let _fonts = fonts_steady();
     let mut d = symbol_doc();
     let l = d.layers[0].id;
     // An instance placed like the first one lies over it, stained green.
@@ -699,6 +1170,7 @@ fn symbol_instances_draw_as_groups_of_their_placed_art() {
 /// Inline graphics in type draw the art placed for them in an earlier frame, as instances do.
 #[test]
 fn inline_graphics_keep_their_placed_art_between_frames() {
+    let _fonts = fonts_steady();
     use vectorcraft_doc::text::{CharStyle, InlineArt, TextObject, TextRun};
     let mut d = Document::new(200.0, 100.0);
     let art = symbol_art(&mut d);
@@ -722,6 +1194,7 @@ fn inline_graphics_keep_their_placed_art_between_frames() {
 /// decorations in layout order (the whole text's path is kept once, the runs as spans of it).
 #[test]
 fn text_runs_draw_their_own_glyphs_from_the_shared_outlines() {
+    let _fonts = fonts_steady();
     use vectorcraft_doc::text::{CharStyle, TextObject, TextRun};
     let plain = CharStyle { size: 24.0, ..Default::default() };
     let under = CharStyle { underline: true, ..plain.clone() };

@@ -512,6 +512,7 @@
 	Three Point Perspective	3점 투시
 	Save Grid as Preset…	격자를 프리셋으로 저장…
 	Snap to Pixel	픽셀에 스냅
+	Precise Cursors	정밀 커서
 	Snap to Point	포인트에 스냅
 	Snap to Glyph	글리프에 스냅
 	New View…	새 보기…
@@ -4167,9 +4168,6 @@ effect	Vertical	세로
 	Rotation Y	Y 회전
 	Rotation Z	Z 회전
 	Shading	셰이딩
-	Direction	방향
-	Elevation	고도
-	Ambient	주변광
 	Segments	세그먼트
 	Show axis	축 표시
 	Reset all	모두 재설정
@@ -4279,3 +4277,16 @@ lighting	Light	광원
 @msg	unknown parameter `{key}`; the command takes: {keys}	알 수 없는 매개변수 `{key}`: 이 명령이 받는 매개변수: {keys}
 	Load EPS into Clipboard	EPS를 클립보드로 불러오기
 @msg	an image of {w} × {h} pixels is too large to draw	{w} × {h}픽셀 이미지는 너무 커서 그릴 수 없습니다
+@msg	give a fraction `t` from 0 to 1	0에서 1 사이의 값 `t`를 지정하세요
+@msg	give the path `id`	패스 `id`를 지정하세요
+@msg	invalid stroke widths	선 너비가 유효하지 않습니다
+@msg	object has no weighted stroke	개체에 유효한 양의 두께를 가진 선이 없습니다
+# Corner Radius: a field per corner of a live rectangle.
+	Single Corner Radius	단일 모퉁이 반지름
+	Top Left:	왼쪽 위:
+	Top Right:	오른쪽 위:
+	Bottom Left:	왼쪽 아래:
+	Bottom Right:	오른쪽 아래:
+	Softness	부드러움
+	Ambient Light	주변광
+	Light behind the object	개체 뒤의 조명

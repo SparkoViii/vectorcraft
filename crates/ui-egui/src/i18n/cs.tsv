@@ -494,6 +494,7 @@
 	Three Point Perspective	Tříbodová perspektiva
 	Save Grid as Preset…	Uložit mřížku jako přednastavení…
 	Snap to Pixel	Přichytávat k obrazovým bodům
+	Precise Cursors	Přesné kurzory
 	Snap to Point	Přichytávat k bodům
 	Snap to Glyph	Přichytávat ke glyfům
 	New View…	Nové zobrazení…
@@ -753,10 +754,7 @@
 	Rotation Y	Otočení Y
 	Rotation Z	Otočení Z
 	Shading	Stínování
-	Direction	Směr
-	Elevation	Výška světla
 	Intensity	Intenzita
-	Ambient	Okolní osvětlení
 	Segments	Segmenty
 	Show axis	Zobrazit osu
 	Reset all	Obnovit vše
@@ -4746,3 +4744,16 @@ mark-style	Japanese	Japonské
 @msg	unknown parameter `{key}`; the command takes: {keys}	neznámý parametr `{key}`; příkaz přijímá: {keys}
 	Load EPS into Clipboard	Načíst EPS do schránky
 @msg	an image of {w} × {h} pixels is too large to draw	obraz o velikosti {w} × {h} obrazových bodů je příliš velký na vykreslení
+@msg	give a fraction `t` from 0 to 1	zadejte hodnotu `t` od 0 do 1
+@msg	give the path `id`	zadejte `id` cesty
+@msg	invalid stroke widths	neplatné šířky tahu
+@msg	object has no weighted stroke	objekt nemá tah s platnou kladnou tloušťkou
+# Corner Radius: a field per corner of a live rectangle.
+	Single Corner Radius	Jeden poloměr rohů
+	Top Left:	Vlevo nahoře:
+	Top Right:	Vpravo nahoře:
+	Bottom Left:	Vlevo dole:
+	Bottom Right:	Vpravo dole:
+	Softness	Měkkost
+	Ambient Light	Okolní světlo
+	Light behind the object	Světlo za objektem

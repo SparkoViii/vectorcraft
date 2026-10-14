@@ -2771,6 +2771,7 @@
 	Snap to Glyph	Magnétisme du glyphe
 	Snap to Grid	Magnétisme de la grille
 	Snap to Pixel	Magnétisme du pixel
+	Precise Cursors	Pointeurs précis
 	Snap to Point	Magnétisme du point
 	Snapping Tolerance	Tolérance du magnétisme
 	Social Square Post 1080×1080	Publication carrée pour réseaux sociaux 1080×1080
@@ -4209,9 +4210,6 @@ effect	Soft	Doux
 	Rotation Y	Rotation Y
 	Rotation Z	Rotation Z
 	Shading	Ombrage
-	Direction	Direction
-	Elevation	Élévation
-	Ambient	Lumière ambiante
 	Segments	Segments
 	Show axis	Afficher l’axe
 	Reset all	Tout réinitialiser
@@ -4746,3 +4744,16 @@ mark-style	Japanese	Japonais
 theme	Appearance	Apparence
 	Load EPS into Clipboard	Charger un EPS dans le presse-papiers
 @msg	an image of {w} × {h} pixels is too large to draw	une image de {w} × {h} pixels est trop grande pour être dessinée
+@msg	give a fraction `t` from 0 to 1	indiquez une valeur `t` comprise entre 0 et 1
+@msg	give the path `id`	indiquez l’`id` du tracé
+@msg	invalid stroke widths	largeurs de contour non valides
+@msg	object has no weighted stroke	l’objet n’a pas de contour d’épaisseur positive valide
+# Corner Radius: a field per corner of a live rectangle.
+	Single Corner Radius	Rayon d’angle unique
+	Top Left:	En haut à gauche :
+	Top Right:	En haut à droite :
+	Bottom Left:	En bas à gauche :
+	Bottom Right:	En bas à droite :
+	Softness	Douceur
+	Ambient Light	Lumière ambiante
+	Light behind the object	Lumière derrière l'objet

@@ -261,6 +261,9 @@ pub struct Services {
     /// [`Self::start_pick`]'s dialogs are sheets on the window (macOS): while one is open the app
     /// neither quits nor closes documents, as under the modal dialog before.
     pub dialogs_are_sheets: bool,
+    /// The window is on Wayland: the tool cursors are painted into it instead of handed to the
+    /// compositor as bitmaps ([`cursors::os_cursors`]).
+    pub wayland: bool,
 }
 
 /// Cached canvas raster.
@@ -279,6 +282,9 @@ pub struct CanvasCache {
     pub slices: Option<SliceCache>,
     /// The print tiling's pages for (document uid, revision) (View → Show Print Tiling).
     pub print_tiling: Option<PrintTilingCache>,
+    /// The marks Type → Show Hidden Characters drew on each text object in the last frame that
+    /// showed them.
+    pub hidden_chars: canvas::HiddenChars,
     /// [`VectorcraftApp::selection_box`] for (document uid, revision, Use Preview Bounds).
     pub selection_box: Option<((u64, u64, bool), Option<vectorcraft_doc::OrientedBox>)>,
     /// [`VectorcraftApp::selection_bounds`] for (document uid, revision).
@@ -469,6 +475,7 @@ impl VectorcraftApp {
                 worker_started: false,
                 slices: None,
                 print_tiling: None,
+                hidden_chars: Default::default(),
                 selection_box: None,
                 selection_bounds: None,
                 cursors: Default::default(),
@@ -559,6 +566,28 @@ impl VectorcraftApp {
         let docs = self.session.documents();
         self.views.truncate(docs.len());
         self.views.extend(docs.iter().skip(self.views.len()).map(View::of));
+        for (view, doc) in self.views.iter_mut().zip(docs) {
+            view.artboard = view.artboard.min(doc.doc.artboards.len().saturating_sub(1));
+        }
+        // Undo can remove the Artboard tool's active or additionally selected boards. Repair only
+        // invalid indices: valid multiselection, drag state and tool options must survive history.
+        if self.session.tool_id() != "artboard" || self.session.tool_busy() {
+            return;
+        }
+        let Some(n) = self.session.active().map(|d| d.doc.artboards.len()).filter(|n| *n > 0) else { return };
+        let Some(view) = self.session.active_index().and_then(|i| self.views.get_mut(i)) else { return };
+        let options = self.session.tool_options();
+        let Some(selected) = options["selected"].as_array() else { return };
+        let mut valid: Vec<usize> = selected.iter().filter_map(Value::as_u64).filter_map(|i| usize::try_from(i).ok()).filter(|i| *i < n).collect();
+        if valid.len() != selected.len() {
+            if valid.is_empty() {
+                valid.push(view.artboard);
+            }
+            if let Some(active) = valid.first() {
+                view.artboard = *active;
+            }
+            self.session.set_tool_option("selected", &serde_json::json!(valid));
+        }
     }
 
     pub fn view(&self) -> Option<&View> {
@@ -734,7 +763,10 @@ impl VectorcraftApp {
 
     fn drain_control(&mut self, ctx: &egui::Context) {
         let Some(rx) = self.control_rx.take() else { return };
-        while let Ok(req) = rx.try_recv() {
+        let mut handled = 0;
+        while handled < control::MAX_CONTROL_REQUESTS_PER_FRAME {
+            let Ok(req) = rx.try_recv() else { break };
+            handled += 1;
             let reply = req.reply.clone();
             // Guarded per request: a panic must not drop the channel (taken out of `self` above).
             let roots = self.automation_roots.clone();
@@ -757,6 +789,10 @@ impl VectorcraftApp {
                     self.pending_screenshots.push(PendingScreenshot { token, path, data, reply, deadline: now_ms() + settle + 8000.0 });
                 }
             }
+        }
+        if handled == control::MAX_CONTROL_REQUESTS_PER_FRAME {
+            // Leave later requests on the channel and schedule another frame to serve them.
+            ctx.request_repaint();
         }
         self.control_rx = Some(rx);
     }

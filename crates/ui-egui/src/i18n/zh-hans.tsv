@@ -2661,6 +2661,7 @@
 	Snap to Glyph	靠齐字符
 	Snap to Grid	对齐网格
 	Snap to Pixel	对齐像素
+	Precise Cursors	精确光标
 	Snap to Point	对齐点
 	Snapping Tolerance	吸附容差
 	Social Square Post 1080×1080	社交方形帖子 1080×1080
@@ -3795,9 +3796,6 @@ effect	Vertical	垂直
 	Rotation Y	Y 轴旋转
 	Rotation Z	Z 轴旋转
 	Shading	明暗处理
-	Direction	方向
-	Elevation	仰角
-	Ambient	环境光
 	Segments	分段数
 	Show axis	显示轴
 	Reset all	全部重置
@@ -3903,3 +3901,13 @@ lighting	Light	光源
 @msg	unknown parameter `{key}`; the command takes: {keys}	未知参数 `{key}`；该命令接受：{keys}
 	Load EPS into Clipboard	将 EPS 载入剪贴板
 @msg	an image of {w} × {h} pixels is too large to draw	{w} × {h} 像素的图像过大，无法绘制
+
+# Corner Radius: a field per corner of a live rectangle.
+	Single Corner Radius	统一圆角半径
+	Top Left:	左上：
+	Top Right:	右上：
+	Bottom Left:	左下：
+	Bottom Right:	右下：
+	Softness	柔和度
+	Ambient Light	环境光
+	Light behind the object	光源位于对象后方

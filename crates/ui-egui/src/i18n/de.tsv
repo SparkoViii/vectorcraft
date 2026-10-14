@@ -2724,6 +2724,7 @@ effect	Points	Punkte
 	Snap to Glyph	An Glyphe ausrichten
 	Snap to Grid	Am Raster ausrichten
 	Snap to Pixel	An Pixel ausrichten
+	Precise Cursors	Präzise Cursor
 	Snap to Point	An Punkt ausrichten
 	Snapping Tolerance	Einrasttoleranz
 	Social Square Post 1080×1080	Quadratischer Social-Media-Beitrag 1080×1080
@@ -4150,13 +4151,10 @@ theme	Appearance	Erscheinungsbild
 @msg	{key} must be a finite coordinate	{key} muss eine endliche Koordinate sein
 @msg	invalid restored panel group	Ungültige wiederhergestellte Bedienfeldgruppe
 # 3D and Materials › Revolve: its options dialog and gizmos.
-	Ambient	Umgebungslicht
 	Axis side	Achsenseite
-	Direction	Richtung
 	Drag rings to rotate. Shift snaps to 15°.	Ziehen Sie die Ringe, um zu drehen. Mit Shift in 15°-Schritten.
 	Drag the light, or its rings. Shift snaps to 15°.	Ziehen Sie das Licht oder seine Ringe. Mit Shift in 15°-Schritten.
 	Drag values or labels. Double-click a value to type.	Ziehen Sie Werte oder Beschriftungen. Doppelklicken Sie auf einen Wert, um ihn einzugeben.
-	Elevation	Höhe
 	Intensity	Intensität
 	Keep visible surfaces only when expanding	Beim Umwandeln nur sichtbare Flächen behalten
 	Lighting	Beleuchtung
@@ -4270,3 +4268,16 @@ theme	Appearance	Erscheinungsbild
 @msg	unknown parameter `{key}`; the command takes: {keys}	unbekannter Parameter `{key}`; der Befehl akzeptiert: {keys}
 	Load EPS into Clipboard	EPS in die Zwischenablage laden
 @msg	an image of {w} × {h} pixels is too large to draw	ein Bild mit {w} × {h} Pixeln ist zu groß, um gezeichnet zu werden
+@msg	give a fraction `t` from 0 to 1	geben Sie einen Wert `t` von 0 bis 1 an
+@msg	give the path `id`	geben Sie die `id` des Pfads an
+@msg	invalid stroke widths	ungültige Konturbreiten
+@msg	object has no weighted stroke	das Objekt hat keine Kontur mit einer gültigen positiven Stärke
+# Corner Radius: a field per corner of a live rectangle.
+	Single Corner Radius	Einheitlicher Eckenradius
+	Top Left:	Oben links:
+	Top Right:	Oben rechts:
+	Bottom Left:	Unten links:
+	Bottom Right:	Unten rechts:
+	Softness	Weichheit
+	Ambient Light	Umgebungslicht
+	Light behind the object	Licht hinter dem Objekt

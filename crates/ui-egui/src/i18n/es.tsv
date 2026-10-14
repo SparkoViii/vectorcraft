@@ -2774,6 +2774,7 @@
 	Snap to Glyph	Ajustar a glifo
 	Snap to Grid	Ajustar a cuadrícula
 	Snap to Pixel	Ajustar a píxel
+	Precise Cursors	Cursores precisos
 	Snap to Point	Ajustar a punto
 	Snapping Tolerance	Tolerancia de ajuste
 	Social Square Post 1080×1080	Publicación cuadrada para redes 1080×1080
@@ -4199,9 +4200,6 @@ axis	Both	Ambos
 	Rotation Y	Rotación Y
 	Rotation Z	Rotación Z
 	Shading	Sombreado
-	Direction	Dirección
-	Elevation	Elevación
-	Ambient	Luz ambiental
 	Segments	Segmentos
 	Show axis	Mostrar eje
 	Reset all	Restablecer todo
@@ -4687,3 +4685,16 @@ mark-style	Japanese	Japonesas
 @msg	unknown parameter `{key}`; the command takes: {keys}	parámetro desconocido `{key}`; el comando acepta: {keys}
 	Load EPS into Clipboard	Cargar EPS en el portapapeles
 @msg	an image of {w} × {h} pixels is too large to draw	una imagen de {w} × {h} píxeles es demasiado grande para dibujarse
+@msg	give a fraction `t` from 0 to 1	indica un valor `t` de 0 a 1
+@msg	give the path `id`	indica el `id` del trazado
+@msg	invalid stroke widths	anchuras de trazo no válidas
+@msg	object has no weighted stroke	el objeto no tiene un trazo con un grosor positivo válido
+# Corner Radius: a field per corner of a live rectangle.
+	Single Corner Radius	Radio de esquina único
+	Top Left:	Arriba a la izquierda:
+	Top Right:	Arriba a la derecha:
+	Bottom Left:	Abajo a la izquierda:
+	Bottom Right:	Abajo a la derecha:
+	Softness	Suavidad
+	Ambient Light	Luz ambiental
+	Light behind the object	Luz detrás del objeto
