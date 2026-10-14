@@ -110,7 +110,7 @@ fn lookups_fall_back_to_english() {
 
 #[test]
 fn catalog_kinds_are_parsed_and_looked_up() {
-    let c = Catalog::parse("# c\n\tHello\t你好\n@id\tfile.save\t儲存\nmenu\tWindows\t視窗們\n@plural\t{n} file|{n} files\t{n} 個檔案\n\n");
+    let c = Catalog::parse("# c\n\tHello\t你好\n@id\tfile.save\t儲存\nmenu\tWindows\t視窗們\n@plural\t{n} file|{n} files\t{n} 個檔案\n\n", false);
     assert_eq!(c.plain("Hello"), Some("你好"));
     assert_eq!(c.id("file.save"), Some("儲存"));
     assert_eq!(c.contextual("menu", "Windows"), Some("視窗們"));
@@ -260,6 +260,11 @@ fn is_cjk(c: char) -> bool {
     matches!(c as u32, 0x1100..=0x11FF | 0x3000..=0x9FFF | 0xAC00..=0xD7AF | 0xF900..=0xFAFF | 0xFF00..=0xFFEF | 0x20000..=0x2FFFF)
 }
 
+/// Arabic letters, their presentation forms and the Arabic punctuation the catalogs use.
+fn is_arabic(c: char) -> bool {
+    matches!(c as u32, 0x0600..=0x06FF | 0x0750..=0x077F | 0x08A0..=0x08FF | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF)
+}
+
 /// The UI fonts draw every character the catalogs use, in every family the UI draws text with
 /// (the web build has no system fonts to fall back to). Chinese and Japanese characters come from
 /// the craft-fonts build input, which is optional: without it they are left to the installed
@@ -268,6 +273,7 @@ fn is_cjk(c: char) -> bool {
 #[test]
 fn bundled_fonts_cover_the_catalogs() {
     let japanese_ui_font = vectorcraft_text::CRAFT_FONTS.iter().any(|f| f.is_japanese());
+    let arabic_ui_font = vectorcraft_text::CRAFT_FONTS.iter().any(|f| f.is_arabic());
     let ctx = egui::Context::default();
     crate::theme::install_fonts(&ctx);
     let mut output = ctx.run_ui(egui::RawInput::default(), |_| {});
@@ -283,8 +289,10 @@ fn bundled_fonts_cover_the_catalogs() {
         for l in LANGUAGES.iter().filter(|l| !l.source.is_empty()) {
             let (entries, _) = parse_entries(l.source);
             let cjk_checked = japanese_ui_font && l.code == "ja";
-            let chars: std::collections::BTreeSet<char> =
-                entries.iter().flat_map(|(_, _, tr)| tr.chars()).filter(|c| !c.is_whitespace() && (cjk_checked || !is_cjk(*c))).collect();
+            let arabic_checked = arabic_ui_font && l.code == "ar";
+            let chars: std::collections::BTreeSet<char> = entries.iter().flat_map(|(_, _, tr)| tr.chars())
+                .filter(|c| !c.is_whitespace() && (cjk_checked || arabic_checked || (!is_cjk(*c) && !is_arabic(*c))))
+                .collect();
             for family in &families {
                 let font = egui::FontId::new(13.0, family.clone());
                 let gone: String = chars.iter().filter(|c| !fonts.has_glyph(&font, **c)).collect();
@@ -452,7 +460,7 @@ fn cs() -> Lang {
 }
 
 /// Languages whose catalogs leave [`MENU_KEEP_AS_IS`] in English.
-const KEEPS_MENU_NAMES: [&str; 13] = ["cs", "de", "es", "fr", "hu", "it", "ja", "ko", "pl", "pt-br", "ru", "uk", "vi"];
+const KEEPS_MENU_NAMES: [&str; 14] = ["ar", "cs", "de", "es", "fr", "hu", "it", "ja", "ko", "pl", "pt-br", "ru", "uk", "vi"];
 
 /// Menu labels the menu-complete catalogs (Czech, German, Spanish, Italian, Japanese, Brazilian Portuguese) show as they are: the product name, a format name, the built-in workspace
 /// names and the perspective grid presets (names, shown untranslated wherever else they appear).
@@ -1056,7 +1064,7 @@ fn messages_translate_by_template_and_their_parts() {
         "@msg\tcommand `{0}` is not available right now: {1}\tel comando `{0}` no está disponible ahora: {1}\n",
         "@msg\t{a}{b}\tnever\n",
         "@msg\t{n} of {total}\t{total} contiene {n}\n",
-    ));
+    ), false);
     assert_eq!(c.message("nothing selected").map(|m| m.0), Some("nada seleccionado"));
     // The template with the most literal text wins over the generic `{path}: {e}`.
     let (tr, caps) = c.message("Couldn't open a: b.svg: damaged").unwrap();
@@ -1349,4 +1357,91 @@ fn polish_reads_as_polish() {
     assert_eq!(tr_id(pl(), "pathfinder.add", "Add"), "Połącz");
     let nested = "command `object.group` is not available right now: nothing selected";
     assert_eq!(message(pl(), nested), "polecenie `object.group` jest teraz niedostępne: nic nie zaznaczono");
+}
+
+fn ar() -> Lang {
+    Lang::from_code("ar").expect("ar registered")
+}
+
+#[test]
+fn arabic_plurals_follow_cldr_counts() {
+    // zero, one, two, few (…03–10), many (…11–99), other (100, 101, 102…); the last-two-digits
+    // rules repeat above 99, so 103 is `few` again and 111 is `many` again.
+    let forms: Vec<usize> = [0, 1, 2, 3, 10, 11, 99, 100, 101, 102, 103, 110, 111, 200].into_iter().map(plural_arabic).collect();
+    assert_eq!(forms, [0, 1, 2, 3, 3, 4, 4, 5, 5, 5, 3, 3, 4, 5]);
+    // Every Arabic plural row has the six forms, and each count picks its own.
+    let (entries, _) = parse_entries(ar().0.source);
+    let mut count = 0;
+    for (ctx, src, tr) in &entries {
+        if ctx != "@plural" {
+            continue;
+        }
+        count += 1;
+        let forms: Vec<&str> = tr.split('|').collect();
+        assert_eq!(forms.len(), 6, "{src}");
+        let (one, other) = src.split_once('|').unwrap();
+        for (n, form) in [(0, 0), (1, 1), (2, 2), (3, 3), (11, 4), (100, 5), (103, 3), (111, 4)] {
+            // The stored form is in visual order like every Arabic string (bidi.rs).
+            assert_eq!(trn(ar(), n, one, other), super::bidi::visual_rtl(forms[form]).replace("{n}", &n.to_string()), "{src}: {n}");
+        }
+    }
+    assert!(count >= 13, "Arabic plural rows missing");
+}
+
+/// Arabic covers the whole interface (every menu label, the status and error messages, plurals
+/// with six forms), keeps the product, workspace and preset names in English like the other
+/// menu-complete catalogs, and resolves every `ar-*` locale.
+#[test]
+fn arabic_reads_as_arabic() {
+    for tag in ["ar", "ar-SA", "ar-EG", "ar_AE.UTF-8", "AR-ye"] {
+        assert_eq!(lang_from_tag(tag), Some(ar()), "{tag}");
+    }
+    // The Arabic catalog is stored in visual order (bidi.rs): a label's first word is the one
+    // egui draws rightmost, so "أداة لوحة الرسم" comes back with its runs left to right — the
+    // order a right-to-left reader meets them in. Single words, and labels with nothing Arabic
+    // in them, come back as they are.
+    for (en, want) in [
+        ("File", "ملف"),
+        ("Artboard Tool", "الرسم لوحة أداة"),
+        ("Swatches", "الألوان عينات"),
+        ("Pathfinder", "المسارات كاشف"),
+        ("Stroke", "حد"),
+        ("Fill", "تعبئة"),
+        ("Workspace", "العمل مساحة"),
+    ] {
+        assert_eq!(tr(ar(), en), want);
+    }
+    for (n, word) in [(0, "عنصر"), (1, "عنصر"), (2, "عنصران"), (3, "عناصر"), (11, "عنصراً"), (100, "عنصر"), (103, "عناصر")] {
+        assert_eq!(trn(ar(), n, "{n} item", "{n} items"), super::bidi::visual_rtl(&format!("{{n}} {word}")).replace("{n}", &n.to_string()));
+    }
+    assert_eq!(tr_ctx(ar(), "axis", "Both"), "كلاهما");
+}
+
+/// egui lays a label out run by run, left to right, and the bidi pass (`bidi.rs`) orders an
+/// Arabic label's runs for it. This is that combination on a real egui layout, headless: after
+/// the pass the first word of a sentence sits rightmost, and a left-to-right island inside it
+/// keeps its own order — the pass and the shaper must not reverse each other's work (#1202).
+#[test]
+fn arabic_labels_lay_out_right_to_left() {
+    let ctx = egui::Context::default();
+    crate::theme::install_fonts(&ctx);
+    let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+        let font = egui::FontId::new(13.0, egui::FontFamily::Name(crate::theme::FONT_UI.into()));
+        for (label, first, second) in [("ملف جديد", "ملف", "جديد"), ("حفظ كـ PDF…", "حفظ", "PDF")] {
+            let job = egui::text::LayoutJob::single_section(
+                super::bidi::visual_rtl(label),
+                egui::TextFormat { font_id: font.clone(), ..Default::default() },
+            );
+            let galley = ui.painter().layout_job(job);
+            let glyphs = &galley.rows[0].row.glyphs;
+            let x_of = |word: &str| glyphs.iter().filter(|g| word.contains(g.chr)).map(|g| g.pos.x).collect::<Vec<f32>>();
+            let (a, b) = (x_of(first), x_of(second));
+            assert!(!a.is_empty() && !b.is_empty(), "{label}: no glyphs for `{first}`/`{second}`");
+            assert!(
+                a.iter().all(|&x| b.iter().all(|&y| x > y)),
+                "`{label}`: `{first}` must sit right of `{second}` after the pass"
+            );
+        }
+    });
+    output.textures_delta.clear();
 }
