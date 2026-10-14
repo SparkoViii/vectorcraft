@@ -76,8 +76,77 @@ fn write(doc: &Document) -> LegacyAiOutput {
     write_with(doc, LegacyAiOptions::default())
 }
 
+/// `doc` written with options `o`. Every file the tests write is also run as a PostScript program
+/// ([`prints_as`]) and must draw what reading it as the format gives.
 fn write_with(doc: &Document, o: LegacyAiOptions) -> LegacyAiOutput {
-    export_legacy_ai(doc, &LegacyAiOptions { title: "Sample".into(), created: Some(0), ..o }).unwrap()
+    let out = export_legacy_ai(doc, &LegacyAiOptions { title: "Sample".into(), created: Some(0), ..o }).unwrap();
+    let read = crate::import(&out.bytes).unwrap().document;
+    prints_as(&out.bytes, &read);
+    out
+}
+
+/// `doc` as the prolog prints it: without its type, and its gradients filled with their first
+/// stop's colour.
+fn as_printed(doc: &Document) -> Document {
+    fn plain(nodes: &mut Vec<Arc<Node>>) {
+        nodes.retain(|n| !matches!(n.kind, NodeKind::Text(_)));
+        for n in nodes {
+            let n = Arc::make_mut(n);
+            for item in &mut n.appearance.items {
+                if let AppearanceItem::Fill(f) = item
+                    && let Paint::Gradient(g) = &f.paint
+                {
+                    f.paint = g.gradient.stops.first().map_or(Paint::None, |s| Paint::solid(s.color));
+                }
+            }
+            if let Some(c) = n.children_mut() {
+                plain(c);
+            }
+        }
+    }
+    let mut d = doc.clone();
+    plain(&mut d.layers);
+    d
+}
+
+/// The legacy `.ai` `bytes` run as a PostScript program (VectorCraft's PostScript reader, with the
+/// file's prolog) draws as `doc` (whose artboard is the file's) prints ([`as_printed`]): the same
+/// art in the same places, in the same colours.
+fn prints_as(bytes: &[u8], doc: &Document) {
+    let text = String::from_utf8_lossy(bytes);
+    let nums = |key: &str| -> Vec<f64> {
+        let line = text.lines().find_map(|l| l.strip_prefix(key)).unwrap_or_else(|| panic!("no {key}"));
+        line.split_whitespace().map(|v| v.parse().unwrap()).collect()
+    };
+    // The art's box (the page the program draws on) and the artboard's top, in art space (y up).
+    let [llx, lly, urx, ury] = nums("%%HiResBoundingBox:")[..] else { panic!() };
+    let top = nums("%AI3_TileBox:")[3];
+    let board = doc.artboards[0].rect;
+    let there = Rect::new(board.x0 + llx, board.y0 + top - ury, board.x0 + urx, board.y0 + top - lly);
+    let scale = 300.0 / (urx - llx).max(ury - lly).max(1.0);
+    let want = vectorcraft_render::Renderer::new().render_region(&as_printed(doc), there, scale, true);
+    let drew = match crate::import_with(bytes, false) {
+        Ok(page) => {
+            assert!(!page.preview, "read as its program");
+            vectorcraft_render::Renderer::new().render_region(&page.document, Rect::new(0.0, 0.0, urx - llx, ury - lly), scale, true)
+        }
+        // A page that marks nothing (type alone): blank.
+        Err(e) if e.contains("draws nothing") => {
+            vectorcraft_render::Renderer::new().render_region(&Document::new(1.0, 1.0), Rect::new(0.0, 0.0, urx - llx, ury - lly), scale, true)
+        }
+        Err(e) => panic!("the file doesn't run as PostScript: {e}"),
+    };
+    assert_eq!((drew.width, drew.height), (want.width, want.height));
+    let differ = drew
+        .pixels
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(want.pixels.as_chunks::<4>().0)
+        .filter(|(a, b)| a.iter().zip(*b).any(|(x, y)| x.abs_diff(*y) > 48))
+        .count();
+    let share = differ as f64 / f64::from(want.width * want.height).max(1.0);
+    assert!(share < 0.002, "the program draws {:.2}% of the page differently", share * 100.0);
 }
 
 fn children(n: &Node) -> &[Arc<Node>] {
@@ -107,10 +176,12 @@ fn writes_the_documented_operators() {
     ] {
         assert!(text.contains(needle), "missing {needle:?} in\n{text}");
     }
-    // The prolog defines the page trailer's `annotatepage` (§3), in the dictionary the setup begins.
+    // The prolog is the writer's own procedure set, named in the header, in the dictionary the
+    // setup begins; it defines the page trailer's `annotatepage` (§3).
     let prolog = text.split("%%BeginProlog\n").nth(1).and_then(|t| t.split("%%EndProlog\n").next()).unwrap();
-    assert!(prolog.contains("/VCLegacy 8 dict def\nVCLegacy begin\n/annotatepage {} bind def\nend\n"), "{prolog}");
-    assert!(text.contains("%%DocumentSuppliedResources: procset VectorCraft_Legacy 1 0\n"), "{text}");
+    assert!(prolog.starts_with(&format!("%%BeginResource: procset {PROCSET}\n/VCLegacy ")), "{prolog}");
+    assert!(prolog.ends_with("end\n%%EndResource\n") && prolog.contains("\n/annotatepage {} bd\n"), "{prolog}");
+    assert!(text.contains(&format!("%%DocumentSuppliedResources: procset {PROCSET}\n")), "{text}");
     // The hidden layer is written hidden: visible 0.
     assert!(text.contains("%AI5_BeginLayer\n0 1 1 1 0 0 1 "), "{text}");
     // Art space is y up from the artboard's bottom-left: the red square (10..40 down from the top)
@@ -285,6 +356,26 @@ fn art_stays_put_on_an_artboard_a_fraction_of_a_point_tall() {
     let doc = crate::import(text.as_bytes()).unwrap().document;
     let b = children(&doc.layers[0])[0].visual_bounds().unwrap();
     assert!((b.x0 - 10.0).abs() < 1e-3 && (b.y0 - 20.0).abs() < 1e-3 && (b.y1 - 40.0).abs() < 1e-3, "{b:?}");
+}
+
+/// The file prints as the document: run as a PostScript program, its paths, fills, strokes,
+/// compound path, clipping group and image draw where and as the document has them (its gradient
+/// filled with its first stop's colour, as the prolog fills gradients). Read for its layers, it
+/// is read from its program, which has the gradient.
+#[test]
+fn prints_as_the_document() {
+    let mut doc = sample();
+    if let Some(l) = doc.layers.get_mut(1) {
+        Arc::make_mut(l).visible = true;
+    }
+    let out = write(&doc);
+    prints_as(&out.bytes, &doc);
+    let read = crate::import(&out.bytes).unwrap().document;
+    let mut gradients = 0;
+    read.walk(|n| {
+        gradients += n.appearance.items.iter().filter(|i| matches!(i, AppearanceItem::Fill(f) if matches!(f.paint, Paint::Gradient(_)))).count()
+    });
+    assert_eq!((read.layers.len(), gradients), (2, 1));
 }
 
 #[test]
