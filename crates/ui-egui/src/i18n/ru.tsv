@@ -766,6 +766,8 @@
 	Do Not Move	Не перемещать
 	Do you want to save the changes you made to “{name}”?	Сохранить изменения, внесённые в «{name}»?
 	Can't open “{name}”.	Не удаётся открыть «{name}».
+	Can't save “{name}”.	Не удаётся сохранить «{name}».
+	Can't export “{name}”.	Не удаётся экспортировать «{name}».
 	Document	Документ
 	Document Color Mode	Цветовой режим документа
 	Document Info	Сведения о документе
@@ -1298,6 +1300,7 @@
 	Ignore	Игнорировать
 	Ignore Artboards (all the art as one page)	Игнорировать монтажные области (весь рисунок как одна страница)
 	Auto Grouping	Автогруппировка
+	Enhanced	Улучшенный
 	Ignore Color	Игнорировать цвет
 	Ignore White	Игнорировать белый
 	Palette:	Палитра:
@@ -3799,6 +3802,8 @@ axis	Both	Оба
 @msg	recovery copy `{file}`: {e}	копия восстановления `{file}`: {e}
 @msg	resolutions must be between 1 and 2400 ppi	разрешения должны быть от 1 до 2400 ppi
 @msg	result would exceed the canvas (coordinates out of range)	результат превысил бы холст (координаты вне диапазона)
+@msg	objects can't be nested more than 32 deep	объекты нельзя вкладывать глубже 32 уровней
+@msg	the SVG's elements are nested more than {0} deep	элементы SVG вложены глубже {0} уровней
 @msg	scale must be a number from {_1} to {_2}, not {_3}	масштаб должен быть числом от {_1} до {_2}, а не {_3}
 @msg	scale must be a number from {_1} to {_2}, not {s}	масштаб должен быть числом от {_1} до {_2}, а не {s}
 @msg	select (or target) objects whose appearance isn't basic	выделите (или укажите как объект) объекты, оформление которых не является основным
@@ -4309,6 +4314,15 @@ lighting	Light	Свет
 @msg	unknown parameter `{key}`; the command takes: {keys}	неизвестный параметр `{key}`; команда принимает: {keys}
 	Load EPS into Clipboard	Загрузить EPS в буфер обмена
 @msg	an image of {w} × {h} pixels is too large to draw	изображение размером {w} × {h} пикселей слишком велико для отрисовки
+	Basic	Базовый
+	Fill and Stroke Controls	Элементы управления заливкой и обводкой
+	Coloring Controls	Элементы управления цветом
+	Draw Mode Controls	Элементы управления режимом рисования
+	Screen Mode Controls	Элементы управления режимом экрана
+	Drawer menu	Меню ящика
+	Toolbar: Show Controls	Панель инструментов: Показать элементы управления
+@msg	control must be fillStroke, coloring, drawMode or screenMode	control должен быть fillStroke, coloring, drawMode или screenMode
+@msg	unknown control `{name}`: fillStroke, coloring, drawMode or screenMode	неизвестный элемент управления `{name}`: fillStroke, coloring, drawMode или screenMode
 @msg	give a fraction `t` from 0 to 1	укажите значение `t` от 0 до 1
 @msg	give the path `id`	укажите `id` контура
 @msg	invalid stroke widths	недопустимые значения ширины обводки

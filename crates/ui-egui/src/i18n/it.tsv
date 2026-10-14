@@ -768,6 +768,8 @@
 	Do Not Move	Non spostare
 	Do you want to save the changes you made to “{name}”?	Vuoi salvare le modifiche apportate a “{name}”?
 	Can't open “{name}”.	Impossibile aprire «{name}».
+	Can't save “{name}”.	Impossibile salvare «{name}».
+	Can't export “{name}”.	Impossibile esportare «{name}».
 	Document	Documento
 	Document Color Mode	Metodo colore documento
 	Document Info	Informazioni documento
@@ -1300,6 +1302,7 @@
 	Ignore	Ignora
 	Ignore Artboards (all the art as one page)	Ignora tavole da disegno (tutta la grafica come una sola pagina)
 	Auto Grouping	Raggruppamento automatico
+	Enhanced	Avanzato
 	Ignore Color	Ignora colore
 	Ignore White	Ignora bianco
 	Palette:	Palette:
@@ -3803,6 +3806,8 @@ axis	Both	Entrambi
 @msg	recovery copy `{file}`: {e}	copia di recupero `{file}`: {e}
 @msg	resolutions must be between 1 and 2400 ppi	le risoluzioni devono essere comprese tra 1 e 2400 ppi
 @msg	result would exceed the canvas (coordinates out of range)	il risultato supererebbe l'area di disegno (coordinate fuori intervallo)
+@msg	objects can't be nested more than 32 deep	gli oggetti non possono essere nidificati oltre 32 livelli
+@msg	the SVG's elements are nested more than {0} deep	gli elementi dell'SVG sono nidificati oltre {0} livelli
 @msg	scale must be a number from {_1} to {_2}, not {_3}	la scala deve essere un numero da {_1} a {_2}, non {_3}
 @msg	scale must be a number from {_1} to {_2}, not {s}	la scala deve essere un numero da {_1} a {_2}, non {s}
 @msg	select (or target) objects whose appearance isn't basic	seleziona (o imposta come destinazione) oggetti con un aspetto non di base
@@ -4313,6 +4318,15 @@ lighting	Light	Luce
 @msg	unknown parameter `{key}`; the command takes: {keys}	parametro sconosciuto `{key}`; il comando accetta: {keys}
 	Load EPS into Clipboard	Carica EPS negli appunti
 @msg	an image of {w} × {h} pixels is too large to draw	un'immagine di {w} × {h} pixel è troppo grande per essere disegnata
+	Basic	Base
+	Fill and Stroke Controls	Controlli di riempimento e traccia
+	Coloring Controls	Controlli colore
+	Draw Mode Controls	Controlli modalità di disegno
+	Screen Mode Controls	Controlli modalità schermo
+	Drawer menu	Menu del cassetto
+	Toolbar: Show Controls	Barra degli strumenti: Mostra controlli
+@msg	control must be fillStroke, coloring, drawMode or screenMode	control deve essere fillStroke, coloring, drawMode o screenMode
+@msg	unknown control `{name}`: fillStroke, coloring, drawMode or screenMode	controllo sconosciuto `{name}`: fillStroke, coloring, drawMode o screenMode
 @msg	give a fraction `t` from 0 to 1	specifica un valore `t` da 0 a 1
 @msg	give the path `id`	specifica l'`id` del tracciato
 @msg	invalid stroke widths	larghezze della traccia non valide

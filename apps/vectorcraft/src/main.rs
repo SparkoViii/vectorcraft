@@ -35,8 +35,6 @@ mod mac_fonts;
 #[cfg(target_os = "macos")]
 mod mac_menu;
 #[cfg(target_os = "macos")]
-mod mac_save_format;
-#[cfg(target_os = "macos")]
 mod mac_window;
 #[cfg(target_os = "macos")]
 mod open_documents;
@@ -95,6 +93,11 @@ impl eframe::App for App {
             self.app.titlebar_inset = inset.unwrap_or(mac_window::DEFAULT_INSET);
         }
         file_access::unconfined(|| self.app.ui(ui));
+        // Preferences are written when confirmed, not only at exit: a session ended any other way
+        // (the system shutting down, the process ended or crashing) used to lose them (#1747).
+        if self.app.take_prefs_changed() {
+            file_access::unconfined(|| save_prefs(&self.app));
+        }
         // Not while a file dialog's sheet has the keyboard: its name field's composition would go.
         #[cfg(target_os = "macos")]
         if !self.app.file_dialog_open() && self.app.take_ime_discard() {
@@ -480,9 +483,10 @@ fn start_pick(request: PickRequest, parent: &Parent, ui: &egui::Context) -> Opti
             let picked = dialog.pick_files();
             Box::pin(async move { picked.await.unwrap_or_default().iter().map(path).collect() })
         }
-        PickRequest::Save(pick) => {
+        PickRequest::Save(_) => {
+            // Nothing is added to the sheet once rfd has begun it: an accessory view set then made
+            // recent macOS versions dismiss the sheet at once, so nothing could be saved (#1800).
             let picked = dialog.save_file();
-            mac_save_format::attach(window, &pick);
             Box::pin(async move { picked.await.iter().map(path).collect() })
         }
         PickRequest::Folder => {

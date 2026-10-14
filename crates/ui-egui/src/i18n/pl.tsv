@@ -1378,6 +1378,7 @@ lighting	Light	Światło
 	Black and White	Czarno-biały
 	Corners	Narożniki
 	Auto Grouping	Automatyczne grupowanie
+	Enhanced	Ulepszone
 	Ignore Color	Ignoruj kolor
 	Ignore White	Ignoruj biel
 	Palette:	Paleta:
@@ -3390,6 +3391,8 @@ effect	Regular	Normalny
 	Serif / Mincho	Szeryfowe / mincho
 	Changes made since it was last saved will be lost.	Zmiany wprowadzone od ostatniego zapisu zostaną utracone.
 	Can't open “{name}”.	Nie można otworzyć „{name}”.
+	Can't save “{name}”.	Nie można zapisać „{name}”.
+	Can't export “{name}”.	Nie można wyeksportować „{name}”.
 	Downloaded {what}	Pobrano {what}
 	Exported {count} file(s) to {folder}	Wyeksportowane pliki do {folder}: {count}
 	Exported {what}	Wyeksportowano {what}
@@ -3964,6 +3967,8 @@ imageTrace	Outline	Kontur
 @msg	recovery copy `{file}`: {e}	kopia odzyskiwania `{file}`: {e}
 @msg	resolutions must be between 1 and 2400 ppi	rozdzielczości muszą mieścić się w zakresie od 1 do 2400 ppi
 @msg	result would exceed the canvas (coordinates out of range)	wynik wykroczyłby poza płótno (współrzędne poza zakresem)
+@msg	objects can't be nested more than 32 deep	obiektów nie można zagnieżdżać głębiej niż na 32 poziomy
+@msg	the SVG's elements are nested more than {0} deep	elementy SVG są zagnieżdżone głębiej niż na {0} poziomów
 @msg	scale must be a number from {_1} to {_2}, not {_3}	skala musi być liczbą od {_1} do {_2}, nie {_3}
 @msg	scale must be a number from {_1} to {_2}, not {s}	skala musi być liczbą od {_1} do {_2}, nie {s}
 @msg	select (or target) objects whose appearance isn't basic	zaznacz (lub wskaż) obiekty, których wygląd nie jest podstawowy
@@ -4586,6 +4591,15 @@ mark-style	Japanese	Japońskie
 @msg	unknown parameter `{key}`; the command takes: {keys}	nieznany parametr `{key}`; polecenie przyjmuje: {keys}
 	Load EPS into Clipboard	Wczytaj EPS do schowka
 @msg	an image of {w} × {h} pixels is too large to draw	obraz o wymiarach {w} × {h} pikseli jest zbyt duży, aby go narysować
+	Basic	Podstawowy
+	Fill and Stroke Controls	Elementy sterujące wypełnieniem i obrysem
+	Coloring Controls	Elementy sterujące kolorem
+	Draw Mode Controls	Elementy sterujące trybem rysowania
+	Screen Mode Controls	Elementy sterujące trybem ekranu
+	Drawer menu	Menu szuflady
+	Toolbar: Show Controls	Pasek narzędzi: Pokaż elementy sterujące
+@msg	control must be fillStroke, coloring, drawMode or screenMode	control musi mieć wartość fillStroke, coloring, drawMode lub screenMode
+@msg	unknown control `{name}`: fillStroke, coloring, drawMode or screenMode	nieznany element sterujący `{name}`: fillStroke, coloring, drawMode lub screenMode
 @msg	give a fraction `t` from 0 to 1	podaj wartość `t` od 0 do 1
 @msg	give the path `id`	podaj `id` ścieżki
 @msg	invalid stroke widths	nieprawidłowe szerokości obrysu

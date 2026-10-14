@@ -1428,6 +1428,7 @@ lighting	Light	Světlo
 	Black and White	Černobílé
 	Corners	Rohy
 	Auto Grouping	Automatické seskupení
+	Enhanced	Vylepšené
 	Ignore Color	Ignorovat barvu
 	Ignore White	Ignorovat bílou
 	Palette:	Paleta:
@@ -3507,6 +3508,8 @@ effect	Regular	Pravidelný
 	Serif / Mincho	Patkové / mincho
 	Changes made since it was last saved will be lost.	Změny provedené od posledního uložení budou ztraceny.
 	Can't open “{name}”.	„{name}“ nelze otevřít.
+	Can't save “{name}”.	„{name}“ nelze uložit.
+	Can't export “{name}”.	„{name}“ nelze exportovat.
 	Downloaded {what}	Staženo: {what}
 	Exported {count} file(s) to {folder}	Exportováno souborů: {count} do {folder}
 	Exported {what}	Exportováno: {what}
@@ -4098,6 +4101,8 @@ imageTrace	Outline	Obrys
 @msg	recovery copy `{file}`: {e}	kopie pro obnovení `{file}`: {e}
 @msg	resolutions must be between 1 and 2400 ppi	rozlišení musí být mezi 1 a 2400 ppi
 @msg	result would exceed the canvas (coordinates out of range)	výsledek by přesáhl plátno (souřadnice mimo rozsah)
+@msg	objects can't be nested more than 32 deep	objekty nelze vnořit hlouběji než do 32 úrovní
+@msg	the SVG's elements are nested more than {0} deep	prvky SVG jsou vnořeny hlouběji než do {0} úrovní
 @msg	scale must be a number from {_1} to {_2}, not {_3}	měřítko musí být číslo od {_1} do {_2}, ne {_3}
 @msg	scale must be a number from {_1} to {_2}, not {s}	měřítko musí být číslo od {_1} do {_2}, ne {s}
 @msg	select (or target) objects whose appearance isn't basic	vyberte (nebo zacilte) objekty, jejichž vzhled není základní
@@ -4744,6 +4749,14 @@ mark-style	Japanese	Japonské
 @msg	unknown parameter `{key}`; the command takes: {keys}	neznámý parametr `{key}`; příkaz přijímá: {keys}
 	Load EPS into Clipboard	Načíst EPS do schránky
 @msg	an image of {w} × {h} pixels is too large to draw	obraz o velikosti {w} × {h} obrazových bodů je příliš velký na vykreslení
+	Fill and Stroke Controls	Ovládací prvky výplně a tahu
+	Coloring Controls	Ovládací prvky barev
+	Draw Mode Controls	Ovládací prvky režimu kreslení
+	Screen Mode Controls	Ovládací prvky režimu zobrazení
+	Drawer menu	Nabídka zásuvky
+	Toolbar: Show Controls	Panel nástrojů: Zobrazit ovládací prvky
+@msg	control must be fillStroke, coloring, drawMode or screenMode	control musí být fillStroke, coloring, drawMode nebo screenMode
+@msg	unknown control `{name}`: fillStroke, coloring, drawMode or screenMode	neznámý ovládací prvek `{name}`: fillStroke, coloring, drawMode nebo screenMode
 @msg	give a fraction `t` from 0 to 1	zadejte hodnotu `t` od 0 do 1
 @msg	give the path `id`	zadejte `id` cesty
 @msg	invalid stroke widths	neplatné šířky tahu

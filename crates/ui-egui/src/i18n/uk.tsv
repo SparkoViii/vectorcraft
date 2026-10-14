@@ -762,6 +762,8 @@
 	Do Not Move	Не переміщати
 	Do you want to save the changes you made to “{name}”?	Зберегти зміни, внесені до «{name}»?
 	Can't open “{name}”.	Не вдається відкрити «{name}».
+	Can't save “{name}”.	Не вдається зберегти «{name}».
+	Can't export “{name}”.	Не вдається експортувати «{name}».
 	Document	Документ
 	Document Color Mode	Колірний режим документа
 	Document Info	Відомості про документ
@@ -1294,6 +1296,7 @@
 	Ignore	Ігнорувати
 	Ignore Artboards (all the art as one page)	Ігнорувати монтажні області (весь малюнок як одна сторінка)
 	Auto Grouping	Автогрупування
+	Enhanced	Покращений
 	Ignore Color	Ігнорувати колір
 	Ignore White	Ігнорувати білий
 	Palette:	Палітра:
@@ -3787,6 +3790,8 @@ axis	Both	Обидві
 @msg	recovery copy `{file}`: {e}	копія відновлення `{file}`: {e}
 @msg	resolutions must be between 1 and 2400 ppi	дозволи мають бути від 1 до 2400 ppi
 @msg	result would exceed the canvas (coordinates out of range)	результат перевищив би полотно (координати поза діапазоном)
+@msg	objects can't be nested more than 32 deep	об’єкти не можна вкладати глибше ніж на 32 рівні
+@msg	the SVG's elements are nested more than {0} deep	елементи SVG вкладено глибше ніж на {0} рівнів
 @msg	scale must be a number from {_1} to {_2}, not {_3}	масштаб має бути числом від {_1} до {_2}, а не {_3}
 @msg	scale must be a number from {_1} to {_2}, not {s}	масштаб має бути числом від {_1} до {_2}, а не {s}
 @msg	select (or target) objects whose appearance isn't basic	виділіть (або вкажіть як об’єкт) об’єкти, оформлення яких не є основним
@@ -4293,6 +4298,15 @@ lighting	Light	Світло
 @msg	unknown parameter `{key}`; the command takes: {keys}	невідомий параметр `{key}`; команда приймає: {keys}
 	Load EPS into Clipboard	Завантажити EPS у буфер обміну
 @msg	an image of {w} × {h} pixels is too large to draw	зображення розміром {w} × {h} пікселів завелике для відображення
+	Basic	Базовий
+	Fill and Stroke Controls	Елементи керування заливкою та обведенням
+	Coloring Controls	Елементи керування кольором
+	Draw Mode Controls	Елементи керування режимом малювання
+	Screen Mode Controls	Елементи керування режимом екрана
+	Drawer menu	Меню шухляди
+	Toolbar: Show Controls	Панель інструментів: Показати елементи керування
+@msg	control must be fillStroke, coloring, drawMode or screenMode	control має бути fillStroke, coloring, drawMode або screenMode
+@msg	unknown control `{name}`: fillStroke, coloring, drawMode or screenMode	невідомий елемент керування `{name}`: fillStroke, coloring, drawMode або screenMode
 @msg	give a fraction `t` from 0 to 1	вкажіть значення `t` від 0 до 1
 @msg	give the path `id`	вкажіть `id` контуру
 @msg	invalid stroke widths	неприпустимі значення ширини обведення
