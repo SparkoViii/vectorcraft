@@ -4344,3 +4344,9 @@ lighting	Light	광원
 	Softness	부드러움
 	Ambient Light	주변광
 	Light behind the object	개체 뒤의 조명
+# Info panel: the selection's area.
+	Area	면적
+	Area: {area}	면적: {area}
+	Shape area: {area}	도형 면적: {area}
+	Width × height of the selection: the sheet it needs	선택 영역의 폭 × 높이: 필요한 용지
+	Area the closed shapes enclose: holes left out, overlaps counted once	닫힌 도형이 둘러싼 면적: 구멍 제외, 겹친 부분은 한 번만 계산

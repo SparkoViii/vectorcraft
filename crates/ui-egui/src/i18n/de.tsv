@@ -4335,3 +4335,9 @@ theme	Appearance	Erscheinungsbild
 	Softness	Weichheit
 	Ambient Light	Umgebungslicht
 	Light behind the object	Licht hinter dem Objekt
+# Info panel: the selection's area.
+	Area	Fläche
+	Area: {area}	Fläche: {area}
+	Shape area: {area}	Formfläche: {area}
+	Width × height of the selection: the sheet it needs	Breite × Höhe der Auswahl: der benötigte Bogen
+	Area the closed shapes enclose: holes left out, overlaps counted once	Von den geschlossenen Formen umschlossene Fläche: ohne Löcher, Überlappungen einmal gezählt

@@ -4362,3 +4362,9 @@ theme	Appearance	Giao diện
 	Softness	Độ mềm
 	Ambient Light	Ánh sáng môi trường
 	Light behind the object	Ánh sáng phía sau đối tượng
+# Info panel: the selection's area.
+	Area	Diện tích
+	Area: {area}	Diện tích: {area}
+	Shape area: {area}	Diện tích hình: {area}
+	Width × height of the selection: the sheet it needs	Rộng × cao của vùng chọn: tờ cần dùng
+	Area the closed shapes enclose: holes left out, overlaps counted once	Diện tích các hình khép kín bao quanh: bỏ lỗ thủng, phần chồng chỉ tính một lần

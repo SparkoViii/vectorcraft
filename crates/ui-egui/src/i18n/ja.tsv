@@ -4374,3 +4374,9 @@ lighting	Light	ライト
 	Softness	柔らかさ
 	Ambient Light	環境光
 	Light behind the object	オブジェクトの背後のライト
+# Info panel: the selection's area.
+	Area	面積
+	Area: {area}	面積：{area}
+	Shape area: {area}	シェイプの面積：{area}
+	Width × height of the selection: the sheet it needs	選択範囲の幅 × 高さ：必要な用紙
+	Area the closed shapes enclose: holes left out, overlaps counted once	閉じたシェイプが囲む面積：穴を除き、重なりは一度だけ数える

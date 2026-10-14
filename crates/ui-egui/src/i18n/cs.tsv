@@ -4808,3 +4808,9 @@ mark-style	Japanese	Japonské
 	Softness	Měkkost
 	Ambient Light	Okolní světlo
 	Light behind the object	Světlo za objektem
+# Info panel: the selection's area.
+	Area	Plocha
+	Area: {area}	Plocha: {area}
+	Shape area: {area}	Plocha tvaru: {area}
+	Width × height of the selection: the sheet it needs	Šířka × výška výběru: arch, který potřebuje
+	Area the closed shapes enclose: holes left out, overlaps counted once	Plocha uzavřená tvary: bez otvorů, překryvy počítány jednou
