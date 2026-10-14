@@ -1843,6 +1843,8 @@ mod tests_layerclip;
 #[cfg(test)]
 mod tests_layers;
 #[cfg(test)]
+mod tests_legacy_ai;
+#[cfg(test)]
 mod tests_library;
 #[cfg(test)]
 mod tests_linked_stops;
