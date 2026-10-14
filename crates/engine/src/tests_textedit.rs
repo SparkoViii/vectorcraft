@@ -629,3 +629,94 @@ fn a_fill_the_selected_characters_have_records_no_undo_step() {
     s.execute("paint.setStroke", &json!({"color": "#ff0000"})).unwrap();
     assert_eq!(history(&s), before);
 }
+
+fn left(s: &Session, id: NodeId) -> f64 {
+    s.doc().unwrap().doc.bounds_of(&[id], false).unwrap().x0
+}
+
+/// #1881: a Cmd-drag while typing (the Selection tool lent to the Type tool) moves the type with
+/// what was typed, instead of moving the text as it was before the typing.
+#[test]
+fn a_cmd_drag_while_typing_moves_the_typed_text() {
+    let mut s = session();
+    let v = ViewInfo::default();
+    let id = text(&mut s, "Hello");
+    s.select_tool("type", v).unwrap();
+    let b = s.doc().unwrap().doc.bounds_of(&[id], false).unwrap();
+    click(&mut s, b.x1 - 1.0, b.center().y);
+    s.tool_text(" world", v).unwrap();
+    assert!(s.in_interaction(), "still typing");
+    let (x0, at) = (b.x0, b.center());
+    let cmd = Mods { cmd: true, ..Mods::default() };
+    for (k, dx) in [(PointerKind::Down, 0.0), (PointerKind::Drag, 50.0), (PointerKind::Drag, 100.0), (PointerKind::Up, 100.0)] {
+        s.pointer(&PointerEvent { mods: cmd, ..PointerEvent::new(k, at.x + dx, at.y) }, v).unwrap();
+    }
+    assert_eq!(obj(&s, id).plain_text(), "Hello world", "the typing is kept");
+    assert!((left(&s, id) - (x0 + 100.0)).abs() < 1e-6, "and the type moved: {} → {}", x0, left(&s, id));
+    // Typing on, the Type tool back, starts a new session from the moved text.
+    s.tool_text("!", v).unwrap();
+    assert_eq!(obj(&s, id).plain_text(), "Hello world!");
+    assert!((left(&s, id) - (x0 + 100.0)).abs() < 1e-6);
+    key(&mut s, ToolKey::Escape, Mods::default());
+    s.execute("edit.undo", &json!({})).unwrap();
+    // Before it: the typing, then the move.
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(obj(&s, id).plain_text(), "Hello world");
+    assert!((left(&s, id) - x0).abs() < 1e-6);
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(obj(&s, id).plain_text(), "Hello");
+}
+
+/// #1881: the Transform panel moving or scaling the type while it is being typed keeps both the
+/// typing and the transformation, however the editing goes on.
+#[test]
+fn a_transform_panel_edit_while_typing_keeps_the_typing_and_the_transform() {
+    let mut s = session();
+    let v = ViewInfo::default();
+    let id = text(&mut s, "Hello");
+    s.select_tool("type", v).unwrap();
+    let b = s.doc().unwrap().doc.bounds_of(&[id], false).unwrap();
+    click(&mut s, b.x1 - 1.0, b.center().y);
+    s.tool_text(" world", v).unwrap();
+    s.execute("object.setBounds", &json!({"x": 400, "reference": 0})).unwrap();
+    assert!((left(&s, id) - 400.0).abs() < 1e-6);
+    // Typing on.
+    s.tool_text("!", v).unwrap();
+    assert_eq!(obj(&s, id).plain_text(), "Hello world!");
+    assert!((left(&s, id) - 400.0).abs() < 1e-6, "the move stays: {}", left(&s, id));
+    s.execute("object.setBounds", &json!({"width": 300, "reference": 0, "proportional": true})).unwrap();
+    let w = |s: &Session| s.doc().unwrap().doc.bounds_of(&[id], false).unwrap().width();
+    assert!((w(&s) - 300.0).abs() < 1e-6);
+    key(&mut s, ToolKey::Escape, Mods::default());
+    assert_eq!(obj(&s, id).plain_text(), "Hello world!");
+    assert!((w(&s) - 300.0).abs() < 1e-6, "the scale stays: {}", w(&s));
+    assert!((left(&s, id) - 400.0).abs() < 1e-6);
+    // Each its own step, the typing first.
+    let labels = undo_labels(&s);
+    let n = labels.len();
+    assert_eq!(labels[n - 4], "Typing", "{labels:?}");
+    assert_eq!(labels[n - 2], "Typing", "{labels:?}");
+}
+
+/// #1881: a dialog previewing a transformation while the type is being typed (Object › Transform
+/// with Preview) starts from the typed text, and keeps it when it commits.
+#[test]
+fn a_previewed_transform_while_typing_keeps_the_typing() {
+    let mut s = session();
+    let v = ViewInfo::default();
+    let id = text(&mut s, "Hello");
+    s.select_tool("type", v).unwrap();
+    let b = s.doc().unwrap().doc.bounds_of(&[id], false).unwrap();
+    click(&mut s, b.x1 - 1.0, b.center().y);
+    s.tool_text(" world", v).unwrap();
+    s.begin_interaction("Move").unwrap();
+    s.preview("object.setBounds", &json!({"x": 400, "reference": 0})).unwrap();
+    assert_eq!(obj(&s, id).plain_text(), "Hello world", "the preview starts from the typed text");
+    s.commit_interaction().unwrap();
+    assert_eq!(obj(&s, id).plain_text(), "Hello world");
+    assert!((left(&s, id) - 400.0).abs() < 1e-6);
+    // Typing on starts a new session from the moved text.
+    s.tool_text("!", v).unwrap();
+    assert_eq!(obj(&s, id).plain_text(), "Hello world!");
+    assert!((left(&s, id) - 400.0).abs() < 1e-6);
+}
